@@ -18,6 +18,7 @@ import { dag, Container, Directory, object, func } from "@dagger.io/dagger"
 @object()
 export class GitDiffFiles {
   /**
+   *  TO RUN (`dagger call  -m=.dagger get-staged-files --source=.`)
    * Returns an array of files in the staged state
    */
   @func()
