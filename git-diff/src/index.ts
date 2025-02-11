@@ -11,7 +11,7 @@ import { dag, Directory, func, object } from "@dagger.io/dagger";
 @object()
 export class GitDiffFiles {
   /**
-   *  TO RUN (`dagger call  -m=.dagger get-staged-files --source=.`)
+   *  TO RUN (`dagger call  -m=git-diff get-staged-files --source=.`)
    * Returns an array of files in the staged state.
    * This function utilizes `git diff --cached --name-only --diff-filter=ACMR`
    * to list files that are staged for commit, considering added, copied, modified, and renamed files.
@@ -47,7 +47,7 @@ export class GitDiffFiles {
   }
 
   /**
-   *  TO RUN (`dagger call  -m=.dagger get-previous-commit-files --source=.`)
+   *  TO RUN (`dagger call  -m=git-diff get-previous-commit-files --source=.`)
    * Returns an array of files from the previous commit.
    * This function uses `git diff-tree --no-commit-id --name-only -r HEAD~1`
    * to list files that were part of the commit immediately preceding the current HEAD.
@@ -84,7 +84,7 @@ export class GitDiffFiles {
   }
 
   /**
-   *  TO RUN (`dagger call  -m=.dagger get-files-between-commits --source=. --commitRange=<commit-range>`)
+   *  TO RUN (`dagger call  -m=git-diff get-files-between-commits --source=. --commitRange=<commit-range>`)
    * Returns an array of files that have changed between two commits.
    * This function leverages `git diff --name-only <commitRange>`
    * to identify files modified within the specified commit range.

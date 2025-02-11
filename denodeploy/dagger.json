@@ -1,0 +1,6 @@
+{
+    "name": "modules",
+    "sdk": "typescript",
+    "source": ".",
+    "engineVersion": "v0.14.0"
+}

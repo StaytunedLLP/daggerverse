@@ -2,5 +2,5 @@
   "name": "gitDiffFiles",
   "engineVersion": "v0.14.0",
   "sdk": "typescript",
-  "source": ".dagger"
+  "source": "."
 }
