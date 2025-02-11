@@ -1,23 +1,21 @@
 /**
- *  A Dagger module providing Git diff functionalities to retrieve lists of files
- *  based on different Git diff operations.
- *  It allows you to easily get staged files, files from the previous commit,
- *  or files changed between two specific commits within your Dagger pipelines.
+ * A Dagger module providing Git diff functionalities to retrieve lists of files
+ * based on different Git diff operations.
  *
- *  @module
+ * This module allows you to get staged files, files from the previous commit,
+ * or files changed between two specific commits within your Dagger pipelines.
+ *
+ * @module
  */
 import { dag, Directory, func, object } from "@dagger.io/dagger";
 
 @object()
 export class GitDiffFiles {
   /**
-   *  TO RUN (`dagger call  -m=git-diff get-staged-files --source=.`)
-   * Returns an array of files in the staged state.
-   * This function utilizes `git diff --cached --name-only --diff-filter=ACMR`
-   * to list files that are staged for commit, considering added, copied, modified, and renamed files.
+   * Retrieves an array of files that are staged for commit.
    *
    * @param {Directory} source - The source directory to check for staged files.
-   * @returns {Promise<string[]>} - A promise that resolves to an array of staged file paths.
+   * @returns {Promise<string[]>} - An array of staged file paths.
    */
   @func()
   async getStagedFiles(source: Directory): Promise<string[]> {
@@ -47,13 +45,10 @@ export class GitDiffFiles {
   }
 
   /**
-   *  TO RUN (`dagger call  -m=git-diff get-previous-commit-files --source=.`)
-   * Returns an array of files from the previous commit.
-   * This function uses `git diff-tree --no-commit-id --name-only -r HEAD~1`
-   * to list files that were part of the commit immediately preceding the current HEAD.
+   * Retrieves an array of files from the previous commit.
    *
    * @param {Directory} source - The source directory to check for files in the previous commit.
-   * @returns {Promise<string[]>} - A promise that resolves to an array of file paths from the previous commit.
+   * @returns {Promise<string[]>} - An array of file paths from the previous commit.
    */
   @func()
   async getPreviousCommitFiles(source: Directory): Promise<string[]> {
@@ -84,16 +79,11 @@ export class GitDiffFiles {
   }
 
   /**
-   *  TO RUN (`dagger call  -m=git-diff get-files-between-commits --source=. --commitRange=<commit-range>`)
-   * Returns an array of files that have changed between two commits.
-   * This function leverages `git diff --name-only <commitRange>`
-   * to identify files modified within the specified commit range.
-   * The `commitRange` parameter should be a valid Git commit range expression
-   * (e.g., `commit1..commit2`, `branch1...branch2`, or a single commit SHA).
+   * Retrieves an array of files that have changed between two commits.
    *
    * @param {Directory} source - The source directory to check for files in the commit range.
-   * @param {string} commitRange - A string specifying the range of commits (e.g., "HEAD~2..HEAD").
-   * @returns {Promise<string[]>} - A promise that resolves to an array of file paths changed between the commits.
+   * @param {string} commitRange - A string specifying the range of commits.
+   * @returns {Promise<string[]>} - An array of file paths changed between the commits.
    */
   @func()
   async getFilesBetweenCommits(
