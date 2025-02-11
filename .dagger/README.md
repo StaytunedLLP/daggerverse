@@ -17,6 +17,9 @@ Returns an array of files in the staged state.
 dagger call -m=.dagger get-staged-files --source=.
 ```
 
+**Returns:**
+An array of strings representing the staged files.
+
 ### getLastCommitFiles
 
 **Description:**
@@ -27,6 +30,9 @@ Returns an array of files from the last commit.
 ```bash
 dagger call -m=.dagger get-last-commit-files --source=.
 ```
+
+**Returns:**
+An array of strings representing the files from the last commit.
 
 ### getCommitFilesInRange
 
@@ -42,3 +48,6 @@ dagger call -m=.dagger get-commit-files-in-range --source=. --commitRange=<commi
 **Parameters:**
 
 - `commitRange` (optional): A string specifying the range of commits. If not provided, defaults to `HEAD`.
+
+**Returns:**
+A JSON string containing arrays of files for each commit in the specified range.
