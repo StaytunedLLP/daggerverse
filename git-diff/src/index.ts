@@ -1,5 +1,3 @@
-import { dag, Directory, func, object } from "@dagger.io/dagger";
-
 /**
  *  A Dagger module providing Git diff functionalities to retrieve lists of files
  *  based on different Git diff operations.
@@ -8,6 +6,8 @@ import { dag, Directory, func, object } from "@dagger.io/dagger";
  *
  *  @module
  */
+import { dag, Directory, func, object } from "@dagger.io/dagger";
+
 @object()
 export class GitDiffFiles {
   /**
