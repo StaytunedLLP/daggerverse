@@ -1,11 +1,8 @@
 /**
- * A Dagger module providing Git diff functionalities to retrieve lists of files
- * based on different Git diff operations.
+ * A Dagger module providing Git diff functionalities to retrieve lists of files based on different Git diff operations.
  *
  * This module allows you to get staged files, files from the previous commit,
  * or files changed between two specific commits within your Dagger pipelines.
- *
- * @module
  */
 import { dag, Directory, func, object } from "@dagger.io/dagger";
 
