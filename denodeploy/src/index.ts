@@ -5,7 +5,45 @@
  * It includes a function to run the deployment process with specified parameters such as source directory,
  * authentication token, project name, organization, entry point file, and deployment mode (production or preview).
  *
- * The module demonstrates the usage of Dagger's Directory and Secret types, as well as the Deno container.
+ * ## Prerequisites
+ *
+ * ### CI/CD
+ *
+ * To use the `DenoDeploy` module in your CI/CD pipeline, you need to store the `DENO_DEPLOY_TOKEN` as a secret in your CI/CD environment.
+ * This token is used for authentication with the Deno Deploy service.
+ *
+ * 1. **Store the Token**: Add the `DENO_DEPLOY_TOKEN` as a secret in your CI/CD environment (e.g., GitHub Actions, GitLab CI, etc.).
+ * 2. **Pass the Token**: Pass the token in the `token` field when calling the `runDeployctl` function.
+ *
+ * Example for GitHub Actions:
+ *
+ * ```yaml
+ * jobs:
+ *   deploy:
+ *     runs-on: ubuntu-latest
+ *     steps:
+ *       - name: Checkout code
+ *         uses: actions/checkout@v2
+ *       - name: Deploy to Deno
+ *         env:
+ *           DENO_DEPLOY_TOKEN: ${{ secrets.DENO_DEPLOY_TOKEN }}
+ * ```
+ *
+ * ### Local Development
+ *
+ * For local development, you need to set the `DENO_DEPLOY_TOKEN` in your terminal and pass it as an environment variable when running the deployment command.
+ *
+ * 1. **Set the Token**: Set the `DENO_DEPLOY_TOKEN` in your terminal.
+ *
+ * ```sh
+ * export DENO_DEPLOY_TOKEN=your_token_here
+ * ```
+ *
+ * 2. **Pass the Token**: Pass the token as an environment variable when running the deployment command.
+ *
+ * ```sh
+ * dagger call <YOUR_COMMAND_HERE> --token=env:DENO_DEPLOY_TOKEN
+ * ```
  */
 import {
     dag,
@@ -23,7 +61,7 @@ export class DenoDeploy {
      * @param {Directory} source - The source directory containing the project files to be deployed.
      * @param {Secret} token - The secret token used for authentication with the deployment service.
      * @param {string} project - The name of the project to be deployed.
-     * @param {string} org - The organization under which the project is to be deployed.
+     * @param {string} [org] - The organization under which the project is to be deployed (optional).
      * @param {string} entrypoint - The entry point file for the deployment.
      * @param {boolean} prod - A flag indicating whether to deploy in production mode (true) or preview mode (false).
      * @returns {Promise<string>} A promise that resolves to the standard output of the deployment command.
@@ -33,7 +71,7 @@ export class DenoDeploy {
         source: Directory,
         token: Secret,
         project: string,
-        org: string,
+        org: string | undefined,
         entrypoint: string,
         prod: boolean,
     ): Promise<string> {
@@ -60,8 +98,7 @@ export class DenoDeploy {
                 prod ? "--prod" : "--preview",
                 "--project",
                 project,
-                "--org",
-                org,
+                ...(org ? ["--org", org] : []),
                 "--entrypoint",
                 entrypoint,
             ]);
