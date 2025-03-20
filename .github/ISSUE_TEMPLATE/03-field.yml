@@ -1,0 +1,50 @@
+name: Field 📌
+description: Field or scope or domain.
+title: "|"
+type: "Field 📌"
+projects: ["StaytunedLLP/43"]
+
+body:
+  - type: textarea
+    attributes:
+      label: Issue Description
+      value: |
+        # Field
+
+        <!-- Field name (e.g., api.domain.com, admin-portal, payments-service) -->
+
+        ## Overview
+
+        ### Purpose & Scope
+        <!-- What this field/domain does and its technical boundaries -->
+
+        ### Key Components
+        <!-- Core services, modules, or features -->
+
+        ### Dependencies
+        <!-- External systems, APIs, or other fields -->
+
+        ### Architecture Notes
+        <!-- Essential patterns or decisions -->
+
+        ### Team
+        <!-- Responsible team(s) -->
+
+        ## Documentation
+        <!-- Links to diagrams, resources, or additional context -->
+
+        ## Related Items
+        <!-- Features: #123 | Fields: #456 -->
+
+  - type: markdown
+    attributes:
+      value: |
+        :yellow_circle: **CAUTION**
+        1. The future is AI. Embrace it, or be left behind. :robot:
+        1. Search existing issues first to avoid duplicates. :dancing_women:
+
+        :red_circle: **IMPORTANT**
+        1. First flag it, then ship it with confidence! :white_flag:
+        1. Your insights matter! Report issues to drive a change. :pushpin:
+
+        Add [alert](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#alerts) if needed.
