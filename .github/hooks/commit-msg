@@ -1,0 +1,103 @@
+#!/bin/sh
+
+# Get the commit message
+MSG_FILE=$1
+MSG=$(cat "$MSG_FILE")
+
+# Define valid types
+TYPES="feat|fix|docs|chore|refactor|perf|test|Story|Content|Debt|Feature|Field|Bug|Decision|Experiment|Feedback|Flag|Incident|Refactor|Release|Request|Research|Security|Task|Ticket|Upgrade"
+
+# Define the regex patterns for each part
+TYPE_SCOPE="^($TYPES)(\([a-zA-Z0-9_-]+\))?: .{1,72}$"
+SEPARATOR="^---$"
+METADATA="^(Release-Note: (public|private|none)|Audience: (user|dev|internal))$"
+
+# Split the message into lines
+IFS=$'\n' read -d '' -r -a lines < "$MSG_FILE"
+
+# Initialize validation flags
+valid_header=0
+valid_metadata=0
+found_separator=0
+metadata_count=0
+
+# Validate the first line (type, scope, and description)
+if echo "${lines[0]}" | grep -E "$TYPE_SCOPE" > /dev/null; then
+    valid_header=1
+fi
+
+# Track if we're in the metadata section
+in_metadata=0
+
+# Validate the structure and metadata
+for line in "${lines[@]}"; do
+    if [ "$line" = "---" ]; then
+        found_separator=1
+        in_metadata=1
+        continue
+    fi
+    
+    if [ $in_metadata -eq 1 ] && [ -n "$line" ]; then
+        if echo "$line" | grep -E "$METADATA" > /dev/null; then
+            metadata_count=$((metadata_count + 1))
+        else
+            valid_metadata=0
+            break
+        fi
+    fi
+done
+
+# Check each requirement separately and provide specific feedback
+ERRORS=""
+
+if [ $valid_header -eq 0 ]; then
+    ERRORS="${ERRORS}Error: Invalid first line format.\n"
+    ERRORS="${ERRORS}The first line must follow the pattern: <type>(<scope>): <description>\n"
+    ERRORS="${ERRORS}Valid types are: ${TYPES//|/, }\n"
+    ERRORS="${ERRORS}Example: feat(auth): Add user authentication system\n\n"
+fi
+
+if [ $found_separator -eq 0 ]; then
+    ERRORS="${ERRORS}Error: Missing metadata separator.\n"
+    ERRORS="${ERRORS}Add '---' before metadata section.\n\n"
+fi
+
+if [ $metadata_count -lt 2 ]; then
+    ERRORS="${ERRORS}Error: Incomplete metadata.\n"
+    ERRORS="${ERRORS}Metadata must include both:\n"
+    ERRORS="${ERRORS}- Release-Note: (public|private|none)\n"
+    ERRORS="${ERRORS}- Audience: (user|dev|internal)\n\n"
+fi
+
+if [ -n "$ERRORS" ]; then
+    echo -e "Your commit message has the following issues:\n"
+    echo -e "$ERRORS"
+    echo "Full commit message format:"
+    echo "┌──────────────────────────────────────────┐"
+    echo "│ type(scope): description                 │ ← First line (required)"
+    echo "│                                          │ ← Empty line"
+    echo "│ Detailed explanation of the change       │ ← Body (optional)"
+    echo "│ including context or important notes.    │"
+    echo "│                                          │ ← Empty line"
+    echo "│ Refs #123                               │ ← Footer (optional)"
+    echo "│                                          │ ← Empty line"
+    echo "│ ---                                      │ ← Separator (required)"
+    echo "│ Release-Note: public                     │ ← Metadata (required)"
+    echo "│ Audience: user                           │ ← Metadata (required)"
+    echo "└──────────────────────────────────────────┘"
+    echo ""
+    echo "Example commit message:"
+    echo "feat(auth): Add two-factor authentication"
+    echo ""
+    echo "Implement 2FA using TOTP for enhanced security."
+    echo "This change affects the login flow."
+    echo ""
+    echo "Refs #456"
+    echo ""
+    echo "---"
+    echo "Release-Note: public"
+    echo "Audience: user"
+    exit 1
+fi
+
+exit 0
