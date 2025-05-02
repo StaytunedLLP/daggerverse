@@ -8,62 +8,43 @@ body:
   - type: textarea
     attributes:
       label: Issue Description
+      description: Provide details about the feature flag being tracked.
       value: |
-        # Issue Title
+        # Feature Flag: <Your Flag Name Here>
 
-        <!-- Select type: [Bug | Feature Request | Enhancement | Task] -->
+        *This issue tracks the lifecycle, configuration, and removal plan for a specific feature flag.*
 
-        ## Issue Details
+        ## Flag Description & Purpose
 
-        ### Purpose and Value
-
-        <!-- Describe what this feature/fix does and why it matters:
-        - What problem does it solve?
-        - How does it benefit users or the business?
-        - Who is the target audience? -->
-
-        ### Priority
-
-        <!-- Define priority based on pareto principle:
-        - P1: 20% effort / 80% impact (high value, relatively easy)
-        - P2: 80% effort / 20% impact (high effort for modest gains)
+        <!--
+        - What feature, behavior, or experiment does this flag control?
+        - Why was this flag introduced? (e.g., gradual rollout, A/B testing, kill switch)
+        - What is the intended user/business value of the feature behind the flag?
         -->
 
-        ### Association
+        <!-- Answer the questions above this line -->
 
-        <!-- Link related items:
-        - Parent Feature/Story: #issue_number
-        - Related Issues: #issue_number
-        - Dependencies: #issue_number -->
 
-        ### Context
+        ## Flag Details
 
-        <!-- Provide:
-        - For bugs: Steps to reproduce, expected vs actual behavior
-        - For features: User story, business context
-        - For enhancements: Current limitation, proposed improvement -->
+        - Repository: `${repoId}`
+        - Metadata ID: `${metadataId}`
+        - Flag ID: `${flagId}`
+        - Parent Flags: (optional)
 
-        ### Notes
+        **Command to fetch details:**
+        ```bash
+        stcli list --reponame <reponame> --metadataId <metadata-id> --flags <flag-key>
+        ```
+        *(Replace placeholders, including `<flag-key>` with the actual key/identifier for this flag)*
 
-        <!-- Any screenshots, mockups, or relevant links -->
+        ---
 
-        ## Proposed Solution
-
-        <!-- Step by step process to solve the problem/issue -->
-
-        ## Acceptance Criteria
-
-        <!-- List specific, measurable outcomes:
-        - [ ] Feature functionality matches requirements
-        - [ ] All edge cases and error scenarios handled
-        - [ ] Unit tests added/updated with >80% coverage
-        - [ ] Integration tests added/updated
-        - [ ] Documentation updated (README, API docs, etc.)
-        - [ ] Code review completed
-        - [ ] Performance impact assessed
-        - [ ] Security implications reviewed
-        - [ ] Backward compatibility maintained
-        - [ ] Logging and monitoring in place -->
+        ## Associated Issues and flags
+        <!--
+        - Link to any related issues files and numbers.
+        - Link to any related feature flags.
+        -->
 
   - type: markdown
     attributes:
