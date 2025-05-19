@@ -34,7 +34,7 @@ body:
 
         **Command to fetch details:**
         ```bash
-        stcli list --reponame <reponame> --metadataId <metadata-id> --flags <flag-key>
+        stcli list --reponame <reponame> --metadataId <metadata-id> --flag <flag-key>
         ```
         *(Replace placeholders, including `<flag-key>` with the actual key/identifier for this flag)*
 
