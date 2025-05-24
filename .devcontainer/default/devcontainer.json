@@ -1,0 +1,33 @@
+{
+  "name": "Default",
+  "image": "ghcr.io/mahakaalgh/dev:latest",
+  "forwardPorts": [
+    8000,
+    4317,
+    4318,
+    55680,
+    55679
+  ],
+  "init": true,
+  "runArgs": [
+    "--env-file",
+    ".env"
+  ],
+  // "features": {
+  //   "ghcr.io/devcontainers/features/github-cli:1": {}
+  // },
+  "remoteUser": "vscode", // Or your preferred username
+  // It gets the token from your local 'gh' and writes it to a temporary file.
+  // "initializeCommand": "mkdir -p .devcontainer && gh auth token > .devcontainer/.host_gh_token_for_login",
+  // --- This command runs INSIDE the container AFTER it's created ---
+  // It uses the token from the file to log in 'gh' inside the container.
+  "postCreateCommand": "mkdir -p /tmp && gh auth token > /tmp/.host_gh_token_for_login && TOKEN_FILE=/tmp/.host_gh_token_for_login; if [ -f \"$TOKEN_FILE\" ]; then echo 'Attempting gh auth login with token from host...'; gh auth login --with-token < \"$TOKEN_FILE\" &&  { echo 'gh auth login successful.'; } || { echo 'gh auth login failed.' >&2; };rm -f \"$TOKEN_FILE\"; else echo 'WARNING: Token file not found. gh auth login skipped.' >&2; rm -f \"$TOKEN_FILE\"; fi && echo 'test -f \"${containerWorkspaceFolder}/.env\" && set -a && source \"${containerWorkspaceFolder}/.env\" && set +a' >> ~/.bashrc && echo 'test -f \"${containerWorkspaceFolder}/.env\" && set -a && source \"${containerWorkspaceFolder}/.env\" && set +a' >> ~/.zshrc",
+  "postStartCommand": "set -a && . \"${containerWorkspaceFolder}/.env\" && set +a && otelcol-contrib --config=otel-collector.yml",
+  "mounts": [
+    "source=vscode-extensions-cache,target=/root/.vscode-server/extensions,type=volume",
+    "source=profile,target=/root,type=volume",
+    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind,consistency=cached"
+  ],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+}
