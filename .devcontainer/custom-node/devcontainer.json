@@ -1,10 +1,10 @@
 {
-    "name": "Custom",
+    "name": "Custom-node",
     "build": {
-        "dockerfile": "./dev.dockerfile",
+        "dockerfile": "./dev.node.dockerfile",
         "args": {
             "OTELCOL_IMAGE_TAG_BASE": "0.117.0",
-            "DENO_VERSION_BASE": "2.3.3"
+            "NODE_VERSION_BASE": "24.0.2"
         }
     },
     "forwardPorts": [

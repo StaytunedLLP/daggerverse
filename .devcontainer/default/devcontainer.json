@@ -1,6 +1,6 @@
 {
   "name": "Default",
-  "image": "ghcr.io/mahakaalgh/dev:latest",
+  "image": "ghcr.io/staytunedllp/dev-node:latest",
   "forwardPorts": [
     8000,
     4317,
