@@ -1,3 +1,13 @@
+/**
+ * A module for building and deploying projects to Firebase.
+ *
+ * This module provides a reusable pipeline to automate the deployment process of Firebase applications.
+ * It handles dependency installation, building (with VITE environment injection), and deployment
+ * using Google Cloud Workload Identity Federation for secure authentication.
+ *
+ * For more information about prerequisites and setup, please refer to:
+ * https://github.com/StaytunedLLP/daggerverse/blob/main/firebase/README.md
+ */
 import { dag, Directory, object, func, File } from "@dagger.io/dagger";
 import { installDeps } from "./install.js";
 import { build } from "./build.js";
@@ -6,7 +16,17 @@ import { deploy } from "./deploy.js";
 @object()
 export class Firebase {
   /**
-   * Main reusable pipeline to build and deploy Firebase
+   * Main reusable pipeline to build and deploy Firebase applications.
+   *
+   * @param {Directory} source - The source directory containing the project files.
+   * @param {string} projectId - The Google Cloud Project ID for Firebase deployment.
+   * @param {File} gcpCredentials - The JSON credentials file for authentication (Service Account Key).
+   * @param {string} [appId] - The Firebase App ID (optional, used for VITE environment injection).
+   * @param {string} [only] - Firebase deploy filter (e.g., 'hosting', 'functions').
+   * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
+   * @param {string} [backendDir] - Path to the backend directory relative to the source.
+   * @param {string} [firebaseDir] - Directory containing firebase.json relative to the source.
+   * @returns {Promise<string>} A promise that resolves to the standard output of the deployment command.
    */
   @func()
   async firebaseDeploy(
@@ -42,3 +62,4 @@ export class Firebase {
     return deployC.stdout();
   }
 }
+
