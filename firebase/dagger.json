@@ -1,0 +1,6 @@
+{
+    "name": "firebase",
+    "sdk": "typescript",
+    "source": ".",
+    "engineVersion": "v0.19.11"
+}
