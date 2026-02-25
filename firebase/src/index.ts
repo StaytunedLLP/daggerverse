@@ -61,5 +61,70 @@ export class Firebase {
     
     return deployC.stdout();
   }
+
+  /**
+   * Orchestrates deployment by automatically selecting the target project ID
+   * based on Git event and reference metadata.
+   *
+   * @param {Directory} source - The source directory containing the project files.
+   * @param {File} gcpCredentials - The JSON credentials file for authentication.
+   * @param {string} projectIdDev - The Firebase Project ID for Development/PRs.
+   * @param {string} projectIdStg - The Firebase Project ID for Staging/Main branch.
+   * @param {string} projectIdProd - The Firebase Project ID for Production/Tags.
+   * @param {string} event - The GitHub event name (e.g., 'pull_request', 'push').
+   * @param {string} ref - The Git reference (e.g., 'refs/heads/main', 'refs/tags/v1.0.0').
+   * @param {string} [appId] - Optional Firebase App ID.
+   * @param {string} [only] - Optional deployment filter.
+   * @param {string} [frontendDir] - Path to the frontend directory.
+   * @param {string} [backendDir] - Path to the backend directory.
+   * @param {string} [firebaseDir] - Directory containing firebase.json.
+   * @returns {Promise<string>} Output of the deployment.
+   */
+  @func()
+  async autoDeploy(
+    source: Directory,
+    gcpCredentials: File,
+    projectIdDev: string,
+    projectIdStg: string,
+    projectIdProd: string,
+    event: string,
+    ref: string,
+    appId?: string,
+    only?: string,
+    frontendDir?: string,
+    backendDir?: string,
+    firebaseDir?: string
+  ): Promise<string> {
+    let targetProjectId = projectIdDev;
+    let targetOnly = only;
+
+    if (event === "push") {
+      if (ref.startsWith("refs/tags/v")) {
+        targetProjectId = projectIdProd;
+      } else {
+        targetProjectId = projectIdStg;
+      }
+      // Default to hosting only for automated push deployments if not specified
+      if (!targetOnly) {
+        targetOnly = "hosting";
+      }
+    } else if (event === "pull_request") {
+      targetProjectId = projectIdDev;
+      if (!targetOnly) {
+        targetOnly = "hosting";
+      }
+    }
+
+    return this.firebaseDeploy(
+      source,
+      targetProjectId,
+      gcpCredentials,
+      appId,
+      targetOnly,
+      frontendDir,
+      backendDir,
+      firebaseDir
+    );
+  }
 }
 
