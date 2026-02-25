@@ -26,6 +26,8 @@ export class Firebase {
    * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
    * @param {string} [backendDir] - Path to the backend directory relative to the source.
    * @param {string} [firebaseDir] - Directory containing firebase.json relative to the source.
+   * @param {Secret} [webappConfig] - The FIREBASE_WEBAPP_CONFIG JSON object as a secret.
+   * @param {Secret} [extraEnv] - A secret containing extra environment variables (e.g., VITE_RAZORPAY_ID=xyz).
    * @returns {Promise<string>} A promise that resolves to the standard output of the deployment command.
    */
   @func()
@@ -37,19 +39,35 @@ export class Firebase {
     only?: string,
     frontendDir?: string,
     backendDir?: string,
-    firebaseDir?: string
+    firebaseDir?: string,
+    webappConfig?: Secret,
+    extraEnv?: Secret
   ): Promise<string> {
     // 1. Install dependencies
     const installedSrc = await installDeps(source, frontendDir, backendDir);
     
     // 2. Inject VITE parameters into Web App's .env file 
-    // This matches the github actions extract step
     let configuredSrc = installedSrc;
     if (frontendDir) {
+      // Start with the standard project ID used by the app's config
       let envContent = `VITE_FIREBASE_PROJECT_ID=${projectId}\n`;
+      
       if (appId) {
          envContent += `VITE_FIREBASE_APP_ID=${appId}\n`;
       }
+
+      // Inject the modern FIREBASE_WEBAPP_CONFIG if provided
+      if (webappConfig) {
+        const configJson = await webappConfig.plaintext();
+        envContent += `FIREBASE_WEBAPP_CONFIG='${configJson}'\n`;
+      }
+
+      // Inject arbitrary extra variables (like VITE_RAZORPAY_ID)
+      if (extraEnv) {
+        const extra = await extraEnv.plaintext();
+        envContent += `\n${extra}\n`;
+      }
+
       configuredSrc = configuredSrc.withNewFile(`${frontendDir}/.env`, envContent);
     }
 
@@ -78,6 +96,8 @@ export class Firebase {
    * @param {string} [frontendDir] - Path to the frontend directory.
    * @param {string} [backendDir] - Path to the backend directory.
    * @param {string} [firebaseDir] - Directory containing firebase.json.
+   * @param {Secret} [webappConfig] - Optional web app configuration secret.
+   * @param {Secret} [extraEnv] - Optional extra environment variables secret.
    * @returns {Promise<string>} Output of the deployment.
    */
   @func()
@@ -93,7 +113,9 @@ export class Firebase {
     only?: string,
     frontendDir?: string,
     backendDir?: string,
-    firebaseDir?: string
+    firebaseDir?: string,
+    webappConfig?: Secret,
+    extraEnv?: Secret
   ): Promise<string> {
     let targetProjectId = projectIdDev;
     let targetOnly = only;
@@ -123,7 +145,9 @@ export class Firebase {
       targetOnly,
       frontendDir,
       backendDir,
-      firebaseDir
+      firebaseDir,
+      webappConfig,
+      extraEnv
     );
   }
 }
