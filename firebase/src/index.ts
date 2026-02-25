@@ -8,7 +8,7 @@
  * For more information about prerequisites and setup, please refer to:
  * https://github.com/StaytunedLLP/daggerverse/blob/main/firebase/README.md
  */
-import { dag, Directory, object, func, File } from "@dagger.io/dagger";
+import { dag, Directory, object, func, File, Secret } from "@dagger.io/dagger";
 import { installDeps } from "./install.js";
 import { build } from "./build.js";
 import { deploy } from "./deploy.js";
@@ -20,7 +20,7 @@ export class Firebase {
    *
    * @param {Directory} source - The source directory containing the project files.
    * @param {string} projectId - The Google Cloud Project ID for Firebase deployment.
-   * @param {File} gcpCredentials - The JSON credentials file for authentication (Service Account Key).
+   * @param {Secret} gcpCredentials - The JSON credentials secret for authentication (Service Account Key).
    * @param {string} [appId] - The Firebase App ID (optional, used for VITE environment injection).
    * @param {string} [only] - Firebase deploy filter (e.g., 'hosting', 'functions').
    * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
@@ -32,7 +32,7 @@ export class Firebase {
   async firebaseDeploy(
     source: Directory,
     projectId: string,
-    gcpCredentials: File,
+    gcpCredentials: Secret,
     appId?: string,
     only?: string,
     frontendDir?: string,
@@ -67,7 +67,7 @@ export class Firebase {
    * based on Git event and reference metadata.
    *
    * @param {Directory} source - The source directory containing the project files.
-   * @param {File} gcpCredentials - The JSON credentials file for authentication.
+   * @param {Secret} gcpCredentials - The JSON credentials secret for authentication.
    * @param {string} projectIdDev - The Firebase Project ID for Development/PRs.
    * @param {string} projectIdStg - The Firebase Project ID for Staging/Main branch.
    * @param {string} projectIdProd - The Firebase Project ID for Production/Tags.
@@ -83,7 +83,7 @@ export class Firebase {
   @func()
   async deployToEnv(
     source: Directory,
-    gcpCredentials: File,
+    gcpCredentials: Secret,
     projectIdDev: string,
     projectIdStg: string,
     projectIdProd: string,

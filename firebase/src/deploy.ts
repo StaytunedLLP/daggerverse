@@ -1,4 +1,4 @@
-import { Container, Directory, File } from "@dagger.io/dagger";
+import { Container, Directory, File, Secret } from "@dagger.io/dagger";
 import { firebaseBase } from "./firebase.js";
 
 /**
@@ -6,7 +6,7 @@ import { firebaseBase } from "./firebase.js";
  * 
  * @param {Directory} source - The source directory to deploy.
  * @param {string} projectId - The Firebase project ID.
- * @param {File} gcpCredentials - The service account key file for authentication.
+ * @param {Secret} gcpCredentials - The service account key secret for authentication.
  * @param {string} [only] - Optional filter for what to deploy (e.g. 'hosting').
  * @param {string} [firebaseDir] - Optional directory containing firebase.json.
  * @returns {Promise<Container>} The container after executing the deploy command.
@@ -14,7 +14,7 @@ import { firebaseBase } from "./firebase.js";
 export async function deploy(
   source: Directory,
   projectId: string,
-  gcpCredentials: File,
+  gcpCredentials: Secret,
   only?: string,
   firebaseDir?: string
 ): Promise<Container> {
@@ -37,7 +37,7 @@ export async function deploy(
   // We grab that json file and mount it securely into the firebase CLI container path.
   return firebaseBase()
     .withDirectory("/src", source)
-    .withFile("/auth/gcp-credentials.json", gcpCredentials)
+    .withSecretFile("/auth/gcp-credentials.json", gcpCredentials)
     .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/auth/gcp-credentials.json")
     .withWorkdir(workdir)
     .withExec(cmd);
