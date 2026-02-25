@@ -81,7 +81,7 @@ export class Firebase {
    * @returns {Promise<string>} Output of the deployment.
    */
   @func()
-  async autoDeploy(
+  async deployToEnv(
     source: Directory,
     gcpCredentials: File,
     projectIdDev: string,
