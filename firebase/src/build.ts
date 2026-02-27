@@ -22,11 +22,11 @@ export async function build(
       .withExec(["npm", "run", "build"]);
   }
 
- if (backendDir) {
+  if (backendDir) {
     container = container
       .withWorkdir(`/src/${backendDir}`)
       .withExec(["npm", "run", "build"]);
- }
+  }
 
   return container.directory("/src");
 }
