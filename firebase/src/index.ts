@@ -138,14 +138,14 @@ export class Firebase {
       const generatedEnvLines = Object.entries(envEntries).map(
         ([key, value]) => `${key}=${formatEnvValue(value)}`,
       );
-      const envContent = [
+
+      const lines = [
         existingEnvContent.trimEnd(),
         ...generatedEnvLines,
         extraEnvContent.trim(),
-        "",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      ].filter(Boolean);
+
+      const envContent = lines.length > 0 ? `${lines.join("\n")}\n` : "";
 
       configuredSrc = configuredSrc.withNewFile(
         `${frontendDir}/.env`,
