@@ -1,13 +1,13 @@
-import { dag, Container, Secret } from "@dagger.io/dagger";
+import { dag, Container } from "@dagger.io/dagger";
 
 /**
- * Returns a base container with Node.js and Firebase Tools installed.
+ * Creates the base container for Firebase operations.
  * 
- * @returns {Container} The base Firebase container.
+ * @returns {Container} A container with Node.js and firebase-tools installed.
  */
 export function firebaseBase(): Container {
   return dag
     .container()
-    .from("node:22")
+    .from("node:22-slim")
     .withExec(["npm", "install", "-g", "firebase-tools"]);
 }

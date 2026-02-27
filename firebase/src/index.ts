@@ -4,14 +4,55 @@
  * This module provides a reusable pipeline to automate the deployment process of Firebase applications.
  * It handles dependency installation, building (with VITE environment injection), and deployment
  * using Google Cloud Workload Identity Federation for secure authentication.
- *
- * For more information about prerequisites and setup, please refer to:
- * https://github.com/StaytunedLLP/daggerverse/blob/main/firebase/README.md
  */
-import { dag, Directory, object, func, File, Secret } from "@dagger.io/dagger";
+import { dag, Directory, object, func, Secret, check } from "@dagger.io/dagger";
+import { firebaseBase } from "./firebase.js";
 import { installDeps } from "./install.js";
 import { build } from "./build.js";
 import { deploy } from "./deploy.js";
+
+type FirebaseWebAppConfig = {
+  apiKey?: string;
+  authDomain?: string;
+  projectId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+  measurementId?: string;
+};
+
+function formatEnvValue(value: string): string {
+  if (/^[A-Za-z0-9_./:@-]+$/.test(value)) {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+function lenientParse(input: string): any {
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Attempt to fix common JS literal issues:
+    // 1. Wrap unquoted keys in double quotes
+    // 2. Replace single quotes with double quotes
+    // 3. Remove trailing commas
+    const fixed = trimmed
+      .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+      .replace(/'/g, '"')
+      .replace(/,\s*([}\]])/g, "$1");
+
+    try {
+      return JSON.parse(fixed);
+    } catch (err: any) {
+      throw new Error(
+        `Failed to parse webappConfig. Please ensure it is a valid JSON or JS object literal. ${err.message}`,
+      );
+    }
+  }
+}
 
 @object()
 export class Firebase {
@@ -20,14 +61,14 @@ export class Firebase {
    *
    * @param {Directory} source - The source directory containing the project files.
    * @param {string} projectId - The Google Cloud Project ID for Firebase deployment.
-   * @param {Secret} gcpCredentials - The JSON credentials secret for authentication (Service Account Key).
+   * @param {Secret} gcpCredentials - The JSON credentials secret or direct access token.
    * @param {string} [appId] - The Firebase App ID (optional, used for VITE environment injection).
    * @param {string} [only] - Firebase deploy filter (e.g., 'hosting', 'functions').
    * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
    * @param {string} [backendDir] - Path to the backend directory relative to the source.
    * @param {string} [firebaseDir] - Directory containing firebase.json relative to the source.
-   * @param {Secret} [webappConfig] - The FIREBASE_WEBAPP_CONFIG JSON object as a secret.
-   * @param {Secret} [extraEnv] - A secret containing extra environment variables (e.g., VITE_RAZORPAY_ID=xyz).
+   * @param {Secret} [webappConfig] - Optional Firebase Web App config JSON secret for granular env injection.
+   * @param {Secret} [extraEnv] - Optional secret containing additional environment variables to append to .env.
    * @returns {Promise<string>} A promise that resolves to the standard output of the deployment command.
    */
   @func()
@@ -41,64 +82,95 @@ export class Firebase {
     backendDir?: string,
     firebaseDir?: string,
     webappConfig?: Secret,
-    extraEnv?: Secret
+    extraEnv?: Secret,
   ): Promise<string> {
     // 1. Install dependencies
     const installedSrc = await installDeps(source, frontendDir, backendDir);
-    
-    // 2. Inject VITE parameters into Web App's .env file 
+
+    // 2. Inject VITE parameters into Web App's .env file
     let configuredSrc = installedSrc;
     if (frontendDir) {
-      // Start with the standard project ID used by the app's config
-      let envContent = `VITE_FIREBASE_PROJECT_ID=${projectId}\n`;
-      
+      const envEntries: Record<string, string> = {
+        VITE_FIREBASE_PROJECT_ID: projectId,
+      };
+
       if (appId) {
-         envContent += `VITE_FIREBASE_APP_ID=${appId}\n`;
+        envEntries.VITE_FIREBASE_APP_ID = appId;
       }
 
-      // Inject the modern FIREBASE_WEBAPP_CONFIG if provided
       if (webappConfig) {
         const configJson = await webappConfig.plaintext();
-        envContent += `FIREBASE_WEBAPP_CONFIG='${configJson}'\n`;
+        envEntries.VITE_FIREBASE_WEBAPP_CONFIG = configJson;
+        const parsed = lenientParse(configJson) as FirebaseWebAppConfig;
+
+        const mapping: Array<[keyof FirebaseWebAppConfig, string]> = [
+          ["apiKey", "VITE_FIREBASE_API_KEY"],
+          ["authDomain", "VITE_FIREBASE_AUTH_DOMAIN"],
+          ["projectId", "VITE_FIREBASE_PROJECT_ID"],
+          ["storageBucket", "VITE_FIREBASE_STORAGE_BUCKET"],
+          ["messagingSenderId", "VITE_FIREBASE_MESSAGING_SENDER_ID"],
+          ["appId", "VITE_FIREBASE_APP_ID"],
+          ["measurementId", "VITE_FIREBASE_MEASUREMENT_ID"],
+        ];
+
+        for (const [configKey, envKey] of mapping) {
+          const value = parsed[configKey];
+          if (typeof value === "string" && value.trim().length > 0) {
+            envEntries[envKey] = value;
+          }
+        }
       }
 
-      // Inject arbitrary extra variables (like VITE_RAZORPAY_ID)
+      let extraEnvContent = "";
       if (extraEnv) {
-        const extra = await extraEnv.plaintext();
-        envContent += `\n${extra}\n`;
+        extraEnvContent = await extraEnv.plaintext();
       }
 
-      configuredSrc = configuredSrc.withNewFile(`${frontendDir}/.env`, envContent);
+      let existingEnvContent = "";
+      try {
+        existingEnvContent = await configuredSrc
+          .file(`${frontendDir}/.env`)
+          .contents();
+      } catch {
+        existingEnvContent = "";
+      }
+
+      const generatedEnvLines = Object.entries(envEntries).map(
+        ([key, value]) => `${key}=${formatEnvValue(value)}`,
+      );
+      const envContent = [
+        existingEnvContent.trimEnd(),
+        ...generatedEnvLines,
+        extraEnvContent.trim(),
+        "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      configuredSrc = configuredSrc.withNewFile(
+        `${frontendDir}/.env`,
+        envContent,
+      );
     }
 
     // 3. Build web app and functions
     const builtSrc = await build(configuredSrc, frontendDir, backendDir);
-    
-    // 4. Deploy to Firebase using Workload Identity Credentials
-    const deployC = await deploy(builtSrc, projectId, gcpCredentials, only, firebaseDir);
-    
+
+    // 4. Deploy to Firebase
+    const deployC = await deploy(
+      builtSrc,
+      projectId,
+      gcpCredentials,
+      only,
+      firebaseDir,
+    );
+
     return deployC.stdout();
   }
 
   /**
    * Orchestrates deployment by automatically selecting the target project ID
    * based on Git event and reference metadata.
-   *
-   * @param {Directory} source - The source directory containing the project files.
-   * @param {Secret} gcpCredentials - The JSON credentials secret for authentication.
-   * @param {string} projectIdDev - The Firebase Project ID for Development/PRs.
-   * @param {string} projectIdStg - The Firebase Project ID for Staging/Main branch.
-   * @param {string} projectIdProd - The Firebase Project ID for Production/Tags.
-   * @param {string} event - The GitHub event name (e.g., 'pull_request', 'push').
-   * @param {string} ref - The Git reference (e.g., 'refs/heads/main', 'refs/tags/v1.0.0').
-   * @param {string} [appId] - Optional Firebase App ID.
-   * @param {string} [only] - Optional deployment filter.
-   * @param {string} [frontendDir] - Path to the frontend directory.
-   * @param {string} [backendDir] - Path to the backend directory.
-   * @param {string} [firebaseDir] - Directory containing firebase.json.
-   * @param {Secret} [webappConfig] - Optional web app configuration secret.
-   * @param {Secret} [extraEnv] - Optional extra environment variables secret.
-   * @returns {Promise<string>} Output of the deployment.
    */
   @func()
   async deployToEnv(
@@ -115,7 +187,7 @@ export class Firebase {
     backendDir?: string,
     firebaseDir?: string,
     webappConfig?: Secret,
-    extraEnv?: Secret
+    extraEnv?: Secret,
   ): Promise<string> {
     let targetProjectId = projectIdDev;
     let targetOnly = only;
@@ -126,7 +198,6 @@ export class Firebase {
       } else {
         targetProjectId = projectIdStg;
       }
-      // Default to hosting only for automated push deployments if not specified
       if (!targetOnly) {
         targetOnly = "hosting";
       }
@@ -147,7 +218,39 @@ export class Firebase {
       backendDir,
       firebaseDir,
       webappConfig,
-      extraEnv
+      extraEnv,
     );
+  }
+
+  /**
+   * Validates code quality using npm run lint.
+   *
+   * @param {Directory} source - The source directory containing the project files.
+   * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
+   * @param {string} [backendDir] - Path to the backend directory relative to the source.
+   */
+  @func()
+  @check()
+  async lint(
+    source: Directory,
+    frontendDir?: string,
+    backendDir?: string,
+  ): Promise<void> {
+    const installed = await installDeps(source, frontendDir, backendDir);
+    let container = firebaseBase().withDirectory("/src", installed);
+
+    if (frontendDir) {
+      container = container
+        .withWorkdir(`/src/${frontendDir}`)
+        .withExec(["npm", "run", "lint", "--if-present"]);
+    }
+
+    if (backendDir) {
+      container = container
+        .withWorkdir(`/src/${backendDir}`)
+        .withExec(["npm", "run", "lint", "--if-present"]);
+    }
+
+    await container.sync();
   }
 }
