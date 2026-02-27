@@ -168,59 +168,6 @@ export class Firebase {
     return deployC.stdout();
   }
 
-  /**
-   * Orchestrates deployment by automatically selecting the target project ID
-   * based on Git event and reference metadata.
-   */
-  @func()
-  async deployToEnv(
-    source: Directory,
-    gcpCredentials: Secret,
-    projectIdDev: string,
-    projectIdStg: string,
-    projectIdProd: string,
-    event: string,
-    ref: string,
-    appId?: string,
-    only?: string,
-    frontendDir?: string,
-    backendDir?: string,
-    firebaseDir?: string,
-    webappConfig?: Secret,
-    extraEnv?: Secret,
-  ): Promise<string> {
-    let targetProjectId = projectIdDev;
-    let targetOnly = only;
-
-    if (event === "push") {
-      if (ref.startsWith("refs/tags/v")) {
-        targetProjectId = projectIdProd;
-      } else {
-        targetProjectId = projectIdStg;
-      }
-      if (!targetOnly) {
-        targetOnly = "hosting";
-      }
-    } else if (event === "pull_request") {
-      targetProjectId = projectIdDev;
-      if (!targetOnly) {
-        targetOnly = "hosting";
-      }
-    }
-
-    return this.firebaseDeploy(
-      source,
-      targetProjectId,
-      gcpCredentials,
-      appId,
-      targetOnly,
-      frontendDir,
-      backendDir,
-      firebaseDir,
-      webappConfig,
-      extraEnv,
-    );
-  }
 
   /**
    * Validates code quality using npm run lint.
