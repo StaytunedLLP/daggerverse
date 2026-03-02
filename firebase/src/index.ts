@@ -61,7 +61,7 @@ export class Firebase {
    *
    * @param {Directory} source - The source directory containing the project files.
    * @param {string} projectId - The Google Cloud Project ID for Firebase deployment.
-   * @param {Secret} gcpCredentials - The JSON credentials secret or direct access token.
+   * @param {Secret} gcpCredentials - The JSON credentials secret (Service Account Key or WIF config).
    * @param {string} [appId] - The Firebase App ID (optional, used for VITE environment injection).
    * @param {string} [only] - Firebase deploy filter (e.g., 'hosting', 'functions').
    * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
@@ -166,38 +166,5 @@ export class Firebase {
     );
 
     return deployC.stdout();
-  }
-
-
-  /**
-   * Validates code quality using npm run lint.
-   *
-   * @param {Directory} source - The source directory containing the project files.
-   * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
-   * @param {string} [backendDir] - Path to the backend directory relative to the source.
-   */
-  @func()
-  @check()
-  async lint(
-    source: Directory,
-    frontendDir?: string,
-    backendDir?: string,
-  ): Promise<void> {
-    const installed = await installDeps(source, frontendDir, backendDir);
-    let container = firebaseBase().withDirectory("/src", installed);
-
-    if (frontendDir) {
-      container = container
-        .withWorkdir(`/src/${frontendDir}`)
-        .withExec(["npm", "run", "lint", "--if-present"]);
-    }
-
-    if (backendDir) {
-      container = container
-        .withWorkdir(`/src/${backendDir}`)
-        .withExec(["npm", "run", "lint", "--if-present"]);
-    }
-
-    await container.sync();
   }
 }
