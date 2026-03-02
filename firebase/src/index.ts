@@ -167,37 +167,4 @@ export class Firebase {
 
     return deployC.stdout();
   }
-
-
-  /**
-   * Validates code quality using npm run lint.
-   *
-   * @param {Directory} source - The source directory containing the project files.
-   * @param {string} [frontendDir] - Path to the frontend directory relative to the source.
-   * @param {string} [backendDir] - Path to the backend directory relative to the source.
-   */
-  @func()
-  @check()
-  async lint(
-    source: Directory,
-    frontendDir?: string,
-    backendDir?: string,
-  ): Promise<void> {
-    const installed = await installDeps(source, frontendDir, backendDir);
-    let container = firebaseBase().withDirectory("/src", installed);
-
-    if (frontendDir) {
-      container = container
-        .withWorkdir(`/src/${frontendDir}`)
-        .withExec(["npm", "run", "lint", "--if-present"]);
-    }
-
-    if (backendDir) {
-      container = container
-        .withWorkdir(`/src/${backendDir}`)
-        .withExec(["npm", "run", "lint", "--if-present"]);
-    }
-
-    await container.sync();
-  }
 }
