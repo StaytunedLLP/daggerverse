@@ -1,6 +1,8 @@
 import { Container, Directory, File, Secret } from "@dagger.io/dagger";
 import { firebaseBase } from "./firebase.js";
 
+const GCP_CREDENTIALS_PATH = "/auth/gcp-credentials.json";
+
 /**
  * Executes the Firebase deployment command.
  * 
@@ -47,8 +49,8 @@ export async function deploy(
   const container = firebaseBase()
     .withDirectory("/src", source)
     // Mount the JSON credentials and set standard environment variable
-    .withMountedSecret("/auth/gcp-credentials.json", gcpCredentials)
-    .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/auth/gcp-credentials.json")
+    .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
+    .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
     // Explicitly unset FIREBASE_TOKEN to prevent firebase-tools from seeing it and showing deprecation warnings
     .withoutEnvVariable("FIREBASE_TOKEN")
     .withWorkdir(workdir)
