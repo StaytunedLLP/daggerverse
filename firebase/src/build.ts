@@ -1,5 +1,5 @@
 import { Directory } from "@dagger.io/dagger";
-import { firebaseBase } from "./firebase.js";
+import { nodeBase } from "./firebase.js";
 
 /**
  * Builds the frontend and/or backend directories using 'npm run build'.
@@ -14,7 +14,7 @@ export async function build(
   frontendDir?: string,
   backendDir?: string
 ): Promise<Directory> {
-  let container = firebaseBase().withDirectory("/src", source);
+  let container = nodeBase().withDirectory("/src", source);
 
   if (frontendDir) {
     container = container

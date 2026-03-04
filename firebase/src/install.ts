@@ -1,5 +1,5 @@
-import { Directory, dag, Container } from "@dagger.io/dagger";
-import { firebaseBase } from "./firebase.js";
+import { Directory, Container } from "@dagger.io/dagger";
+import { nodeBase } from "./firebase.js";
 
 /**
  * Installs dependencies in the frontend and/or backend directories using 'npm ci' with caching.
@@ -14,9 +14,7 @@ export async function installDeps(
   frontendDir?: string,
   backendDir?: string,
 ): Promise<Directory> {
-  const npmCache = dag.cacheVolume("npm_cache");
-
-  let container = firebaseBase().withMountedCache("/root/.npm", npmCache);
+  let container = nodeBase();
 
   /**
    * Internal helper to perform a cache-optimized install.
@@ -27,7 +25,7 @@ export async function installDeps(
     dir: string,
   ): Promise<Container> {
     const dirRef = source.directory(dir);
-    
+
     // Check if package.json exists
     try {
       await dirRef.file("package.json").id();
@@ -36,7 +34,8 @@ export async function installDeps(
       return base.withDirectory(`/src/${dir}`, dirRef);
     }
 
-    let ctr = base.withWorkdir(`/src/${dir}`)
+    let ctr = base
+      .withWorkdir(`/src/${dir}`)
       .withFile("package.json", dirRef.file("package.json"));
 
     // package-lock is required for npm ci, but we can fallback to npm install if missing
@@ -48,8 +47,8 @@ export async function installDeps(
       hasLock = false;
     }
 
-    const installCmd = hasLock 
-      ? ["npm", "ci", "--legacy-peer-deps"] 
+    const installCmd = hasLock
+      ? ["npm", "ci", "--legacy-peer-deps"]
       : ["npm", "install", "--legacy-peer-deps"];
 
     return ctr
@@ -65,7 +64,7 @@ export async function installDeps(
     container = await installWithCache(container, backendDir);
   }
 
-  // FINAL FIX: Merge the entire source into /src. 
+  // FINAL FIX: Merge the entire source into /src.
   // This ensures root files like firebase.json and .firebaserc are present.
   // Since this happens AFTER the exec calls, code changes won't invalidate the npm ci cache.
   return container.withDirectory("/src", source).directory("/src");

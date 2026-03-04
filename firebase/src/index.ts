@@ -5,8 +5,7 @@
  * It handles dependency installation, building (with VITE environment injection), and deployment
  * using Google Cloud Workload Identity Federation for secure authentication.
  */
-import { dag, Directory, object, func, Secret, check } from "@dagger.io/dagger";
-import { firebaseBase } from "./firebase.js";
+import { Directory, object, func, Secret } from "@dagger.io/dagger";
 import { installDeps } from "./install.js";
 import { build } from "./build.js";
 import { deploy } from "./deploy.js";
@@ -71,7 +70,8 @@ export class Firebase {
    * @param {Secret} [extraEnv] - Optional secret containing additional environment variables to append to .env.
    * @returns {Promise<string>} A promise that resolves to the standard output of the deployment command.
    */
-  @func()
+  // Deploy has side effects and must run every time.
+  @func({ cache: "never" })
   async firebaseDeploy(
     source: Directory,
     projectId: string,

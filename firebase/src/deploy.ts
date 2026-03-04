@@ -1,5 +1,5 @@
-import { Container, Directory, File, Secret } from "@dagger.io/dagger";
-import { firebaseBase } from "./firebase.js";
+import { Container, Directory, Secret } from "@dagger.io/dagger";
+import { firebaseCliBase } from "./firebase.js";
 
 const GCP_CREDENTIALS_PATH = "/auth/gcp-credentials.json";
 
@@ -46,7 +46,7 @@ export async function deploy(
 
   const workdir = firebaseDir ? `/src/${firebaseDir}` : "/src";
 
-  const container = firebaseBase()
+  const container = firebaseCliBase()
     .withDirectory("/src", source)
     // Mount the JSON credentials and set standard environment variable
     .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
