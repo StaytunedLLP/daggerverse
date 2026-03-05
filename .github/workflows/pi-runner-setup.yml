@@ -1,0 +1,90 @@
+name: Pi | runner setup
+on:
+  workflow_dispatch:
+    inputs:
+      runner_action:
+        description: "Runner: install or uninstall"
+        type: choice
+        options:
+          - install
+          - uninstall
+        default: install
+        required: true
+      runner_names:
+        description: "Runner: names to install/uninstall (format: comma separated)"
+        required: true
+      runner_folder:
+        description: "Runner: base installation folder path"
+        required: false
+      runner_labels:
+        description: "Runner: labels (format: comma separated)"
+        required: false
+      runner_group:
+        description: "Runner: group"
+        required: true
+
+      target_hosts:
+        description: "Targets: list of IPs/hosts (format: comma separated)"
+        required: false
+      target_csv:
+        description: "Targets: CSV path in repo containing hosts (e.g. src/ssh/machine-data.csv)"
+        required: false
+      target_csv_column:
+        description: "Targets: CSV column name that holds IP addresses"
+        default: IP
+        required: false
+      target_identity:
+        description: "Targets: SSH private key path on the runner machine (default: ~/.ssh/gh_actions_ed25519)"
+        required: false
+
+jobs:
+  manage:
+    runs-on: [self-hosted, stayadmin-workflows]
+    steps:
+      - uses: actions/checkout@v6.0.1
+      - name: Install dependencies
+        run: npm ci
+      - name: Run runner manager
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "GH_TOKEN secret is required." >&2
+            exit 1
+          fi
+
+          args=()
+          if [[ -n "${{ inputs.target_hosts }}" ]]; then
+            args+=("--ssh" "${{ inputs.target_hosts }}")
+          fi
+          if [[ -n "${{ inputs.target_csv }}" ]]; then
+            args+=("--csv" "${{ inputs.target_csv }}")
+          fi
+          if [[ -n "${{ inputs.target_csv_column }}" ]]; then
+            args+=("--csv-column" "${{ inputs.target_csv_column }}")
+          fi
+          if [[ -n "${{ inputs.target_identity }}" ]]; then
+            args+=("--ssh-identity" "${{ inputs.target_identity }}")
+          fi
+          if [[ -n "${{ inputs.runner_folder }}" ]]; then
+            args+=("--folder" "${{ inputs.runner_folder }}")
+          fi
+          if [[ -z "${{ inputs.runner_group }}" ]]; then
+            echo "runner_group is required." >&2
+            exit 1
+          fi
+          if [[ -n "${{ inputs.runner_labels }}" ]]; then
+            args+=("--labels" "${{ inputs.runner_labels }}")
+          fi
+          args+=("--runner-group" "${{ inputs.runner_group }}")
+
+          if [[ -z "${{ inputs.target_hosts }}" && -z "${{ inputs.target_csv }}" ]]; then
+            echo "Provide target_hosts or target_csv for remote targets." >&2
+            exit 1
+          fi
+
+          node --experimental-strip-types src/github/runner/runner.ts \
+            "${{ inputs.runner_action }}" \
+            --pat "${GH_TOKEN}" \
+            --runner-names "${{ inputs.runner_names }}" \
+            "${args[@]}"
