@@ -1,0 +1,85 @@
+name: Dagger Bootstrap
+description: Resolve a healthy Dagger engine pod and export runner host env.
+inputs:
+  namespace:
+    description: Namespace where Dagger engine pods run.
+    required: false
+    default: dagger
+  label_selector:
+    description: Label selector for Dagger engine pods.
+    required: false
+    default: name=dagger-engine
+  prefer_same_node:
+    description: Prefer selecting an engine pod on the same Kubernetes node as the runner.
+    required: false
+    default: "true"
+outputs:
+  pod:
+    description: Selected Dagger engine pod name.
+    value: ${{ steps.bootstrap.outputs.pod }}
+  host:
+    description: Computed kube-pod host URL.
+    value: ${{ steps.bootstrap.outputs.host }}
+runs:
+  using: composite
+  steps:
+    - id: bootstrap
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        ns="${{ inputs.namespace }}"
+        selector="${{ inputs.label_selector }}"
+        prefer_same_node="${{ inputs.prefer_same_node }}"
+
+        command -v kubectl >/dev/null || { echo "::error::kubectl is required"; exit 1; }
+        command -v dagger >/dev/null || { echo "::error::dagger CLI is required"; exit 1; }
+
+        can_get="$(kubectl auth can-i get pods -n "${ns}" || true)"
+        can_exec="$(kubectl auth can-i create pods/exec -n "${ns}" || true)"
+        if [ "${can_get}" != "yes" ] || [ "${can_exec}" != "yes" ]; then
+          echo "::error::ServiceAccount cannot reach Dagger in namespace ${ns}."
+          echo "::error::Expected: get/list pods and create pods/exec."
+          exit 1
+        fi
+
+        mapfile -t pod_rows < <(kubectl get pods -n "${ns}" -l "${selector}" --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}')
+
+        if [ "${#pod_rows[@]}" -eq 0 ]; then
+          echo "::error::No running Dagger engine pods found in namespace ${ns} with selector '${selector}'."
+          exit 1
+        fi
+
+        selected_pod=""
+        local_node="${K8S_NODE_NAME:-}"
+
+        if [ "${prefer_same_node}" = "true" ] && [ -n "${local_node}" ]; then
+          for row in "${pod_rows[@]}"; do
+            pod_name="${row%%$'\t'*}"
+            pod_node="${row##*$'\t'}"
+            if [ "${pod_node}" = "${local_node}" ]; then
+              selected_pod="${pod_name}"
+              break
+            fi
+          done
+        fi
+
+        if [ -z "${selected_pod}" ]; then
+          selected_pod="${pod_rows[0]%%$'\t'*}"
+        fi
+
+        host="kube-pod://${selected_pod}?namespace=${ns}"
+
+        {
+          echo "_EXPERIMENTAL_DAGGER_RUNNER_HOST=${host}"
+          echo "DAGGER_ENGINE_POD=${selected_pod}"
+          echo "DAGGER_NO_NAG=1"
+        } >> "${GITHUB_ENV}"
+
+        {
+          echo "pod=${selected_pod}"
+          echo "host=${host}"
+        } >> "${GITHUB_OUTPUT}"
+
+        echo "Selected Dagger engine pod: ${selected_pod}"
+        dagger version
