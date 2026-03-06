@@ -31,36 +31,46 @@ export class Playwright {
         // -------------------------------------------------------------------------
         const base = dag
             .container()
-            .from("node:24") // Use latest Node matching staylook engine requirements
-            .withDirectory("/src", source, {
-                exclude: ["node_modules", "dist", ".git", "dagger"]
-            })
+            .from("node:24")
             .withWorkdir("/src")
             .withMountedCache("/root/.npm", nodeCache)
             .withMountedCache("/root/.cache/ms-playwright", playwrightCache)
             .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
-            .withEnvVariable("HUSKY", "0") // Disable husky during CI
+            .withEnvVariable("HUSKY", "0")
 
         // -------------------------------------------------------------------------
-        // 3. GitHub Packages Authentication
+        // 3. GitHub Packages Authentication & Dependency Installation (Cached)
         // -------------------------------------------------------------------------
-        const setup = base.withExec([
+        // Only copy lockfiles first to ensure caching works correctly.
+        // If package-lock.json hasn't changed, Dagger will reuse the 'npm ci' layer.
+        let setup = base.withExec([
             "sh", "-c",
             "echo \"@staytunedllp:registry=https://npm.pkg.github.com\" > .npmrc && " +
             "echo \"//npm.pkg.github.com/:_authToken=\\\${NODE_AUTH_TOKEN}\" >> .npmrc && " +
             "echo \"always-auth=true\" >> .npmrc"
         ])
+            .withFile("package.json", source.file("package.json"))
+
+        try {
+            setup = setup.withFile("package-lock.json", source.file("package-lock.json"))
+        } catch {
+            // Fallback if no lockfile
+        }
+
+        const installed = setup.withExec(["npm", "ci", "--legacy-peer-deps"])
 
         // -------------------------------------------------------------------------
-        // 4. Install Dependencies
+        // 4. Copy Rest of Source
         // -------------------------------------------------------------------------
-        const installed = setup.withExec(["npm", "ci", "--legacy-peer-deps"])
+        // Now that dependencies are installed, we copy the actual code.
+        const fullSource = installed.withDirectory(".", source, {
+            exclude: ["node_modules", "dist", ".git", "dagger"]
+        })
 
         // -------------------------------------------------------------------------
         // 5. Build Project
         // -------------------------------------------------------------------------
-        // Required step for staylook as it runs tests on built components.
-        const built = installed.withExec(["npm", "run", "build"])
+        const built = fullSource.withExec(["npm", "run", "build"])
 
         // -------------------------------------------------------------------------
         // 6. Playwright Browser & OS Dependency Installation
