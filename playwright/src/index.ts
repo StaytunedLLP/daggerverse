@@ -59,20 +59,27 @@ export class Playwright {
         })
 
         // 1. Copy package definitions
-        // 2. Inject GLOBAL auth into /root/.npmrc so it's available for all sub-installs
-        // 3. Run install in every directory containing a lockfile
+        // 2. Clear all potentially overriding local .npmrc files
+        // 3. Inject GLOBAL auth into /root/.npmrc so it's available for all sub-installs
+        // 4. Run install in every directory containing a lockfile (Failing on any error)
         const installed = base
             .withDirectory(".", packageDefinitions)
             .withExec([
                 "sh", "-c",
-                `echo "@${registryScope}:registry=https://npm.pkg.github.com" > /root/.npmrc && ` +
-                `echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> /root/.npmrc && ` +
-                `echo "always-auth=true" >> /root/.npmrc`
+                "find . -name '.npmrc' -delete"
             ])
             .withExec([
                 "sh", "-c",
-                "find . -name 'package-lock.json' -not -path '*/node_modules/*' -exec sh -c 'echo \"Installing in $(dirname {})\" && cd $(dirname {}) && npm ci --legacy-peer-deps' \\;"
+                `echo "@${registryScope}:registry=https://npm.pkg.github.com" > /root/.npmrc && ` +
+                `echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> /root/.npmrc`
             ])
+            .withExec([
+                "sh", "-c",
+                "find . -name 'package-lock.json' -not -path '*/node_modules/*' | while read f; do " +
+                "dir=$(dirname \"$f\"); echo \"Installing in $dir\"; " +
+                "(cd \"$dir\" && npm ci --legacy-peer-deps) || exit 1; done"
+            ])
+            .withEnvVariable("PATH", "/src/node_modules/.bin:${PATH}", { expand: true })
 
         // -------------------------------------------------------------------------
         // 4. Copy Rest of Source
