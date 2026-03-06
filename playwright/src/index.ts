@@ -46,21 +46,34 @@ export class Playwright {
         // -------------------------------------------------------------------------
         // 3. GitHub Packages Authentication & Dependency Installation (Cached)
         // -------------------------------------------------------------------------
+        // Create .npmrc with auth FIRST so it's available for all nested installs
         let setup = base.withExec([
             "sh", "-c",
             `echo "@${registryScope}:registry=https://npm.pkg.github.com" > .npmrc && ` +
             `echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> .npmrc && ` +
             `echo "always-auth=true" >> .npmrc`
         ])
-            .withFile("package.json", source.file("package.json"))
 
-        try {
-            setup = setup.withFile("package-lock.json", source.file("package-lock.json"))
-        } catch {
-            // Fallback if no lockfile
-        }
+        // Filter source to only include package definitions to preserve cache invalidation granularity
+        const packageDefinitions = dag.directory().withDirectory("/", source, {
+            include: [
+                "**/package.json",
+                "**/package-lock.json",
+                "**/package-lock.yaml",
+                "**/.npmrc",
+                "**/yarn.lock",
+                "**/pnpm-lock.yaml"
+            ]
+        })
 
-        const installed = setup.withExec(["npm", "ci", "--legacy-peer-deps"])
+        // Copy package definitions and run install in every directory containing a lockfile
+        // This handles standard workspaces AND nested monorepos that don't use root workspaces.
+        const installed = setup
+            .withDirectory(".", packageDefinitions)
+            .withExec([
+                "sh", "-c",
+                "find . -name 'package-lock.json' -not -path '*/node_modules/*' -exec sh -c 'echo \"Installing in $(dirname {})\" && cd $(dirname {}) && npm ci --legacy-peer-deps' \\;"
+            ])
 
         // -------------------------------------------------------------------------
         // 4. Copy Rest of Source
