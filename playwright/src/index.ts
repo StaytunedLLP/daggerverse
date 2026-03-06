@@ -46,14 +46,6 @@ export class Playwright {
         // -------------------------------------------------------------------------
         // 3. GitHub Packages Authentication & Dependency Installation (Cached)
         // -------------------------------------------------------------------------
-        // Create .npmrc with auth FIRST so it's available for all nested installs
-        let setup = base.withExec([
-            "sh", "-c",
-            `echo "@${registryScope}:registry=https://npm.pkg.github.com" > .npmrc && ` +
-            `echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> .npmrc && ` +
-            `echo "always-auth=true" >> .npmrc`
-        ])
-
         // Filter source to only include package definitions to preserve cache invalidation granularity
         const packageDefinitions = dag.directory().withDirectory("/", source, {
             include: [
@@ -66,10 +58,17 @@ export class Playwright {
             ]
         })
 
-        // Copy package definitions and run install in every directory containing a lockfile
-        // This handles standard workspaces AND nested monorepos that don't use root workspaces.
-        const installed = setup
+        // 1. Copy package definitions
+        // 2. Inject GLOBAL auth into /root/.npmrc so it's available for all sub-installs
+        // 3. Run install in every directory containing a lockfile
+        const installed = base
             .withDirectory(".", packageDefinitions)
+            .withExec([
+                "sh", "-c",
+                `echo "@${registryScope}:registry=https://npm.pkg.github.com" > /root/.npmrc && ` +
+                `echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}" >> /root/.npmrc && ` +
+                `echo "always-auth=true" >> /root/.npmrc`
+            ])
             .withExec([
                 "sh", "-c",
                 "find . -name 'package-lock.json' -not -path '*/node_modules/*' -exec sh -c 'echo \"Installing in $(dirname {})\" && cd $(dirname {}) && npm ci --legacy-peer-deps' \\;"
