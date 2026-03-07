@@ -13,3 +13,5 @@ dagger call prepare-node-workspace \
 Available switches:
 
 - `--playwright-install`
+- `--firebase-tools`
+- `--java-dependency`

@@ -60,9 +60,20 @@ function buildScript(
   packagePaths: string[],
   options: {
     playwrightInstall: boolean;
+    firebaseTools: boolean;
+    javaDependency: boolean;
   },
 ): string {
   const lines = ["set -euo pipefail"];
+
+  if (options.javaDependency) {
+    lines.push("apt-get update");
+    lines.push("DEBIAN_FRONTEND=noninteractive apt-get install -y default-jre-headless");
+  }
+
+  if (options.firebaseTools) {
+    lines.push("npm install -g firebase-tools");
+  }
 
   for (const packagePath of packagePaths) {
     const workspacePath =
@@ -88,6 +99,8 @@ export class CopilotSetup {
     nodeAuthToken: Secret,
     packagePaths = ".",
     playwrightInstall = false,
+    firebaseTools = false,
+    javaDependency = false,
   ): Promise<string> {
     const packages = splitCsv(packagePaths);
     const workspace = withWorkspace(source, nodeAuthToken, packages).withExec(
@@ -96,6 +109,8 @@ export class CopilotSetup {
         "-lc",
         buildScript(packages, {
           playwrightInstall,
+          firebaseTools,
+          javaDependency,
         }),
       ],
     );
