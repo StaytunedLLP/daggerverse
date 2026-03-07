@@ -15,6 +15,7 @@ dagger call node-checks \
 ```
 
 Available switches:
+
 - `--format`
 - `--lint`
 - `--test`
