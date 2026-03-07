@@ -21,14 +21,37 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function withTooling(
+  container: Container,
+  options: {
+    firebaseTools: boolean;
+  },
+): Container {
+  let next = container;
+
+  if (options.firebaseTools) {
+    next = next.withExec([
+      "bash",
+      "-lc",
+      [
+        "set -euo pipefail",
+        "apt-get update",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y default-jre-headless",
+      ].join("\n"),
+    ]);
+    next = next.withExec(["npm", "install", "-g", "firebase-tools"]);
+  }
+
+  return next;
+}
+
 function withWorkspace(
+  container: Container,
   source: Directory,
   nodeAuthToken: Secret,
   npmrcPaths: string[],
 ): Container {
-  return dag
-    .container()
-    .from("node:24-bookworm")
+  return container
     .withMountedDirectory("/workspace", source)
     .withWorkdir("/workspace")
     .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
@@ -60,20 +83,9 @@ function buildScript(
   packagePaths: string[],
   options: {
     playwrightInstall: boolean;
-    firebaseTools: boolean;
-    javaDependency: boolean;
   },
 ): string {
   const lines = ["set -euo pipefail"];
-
-  if (options.javaDependency) {
-    lines.push("apt-get update");
-    lines.push("DEBIAN_FRONTEND=noninteractive apt-get install -y default-jre-headless");
-  }
-
-  if (options.firebaseTools) {
-    lines.push("npm install -g firebase-tools");
-  }
 
   for (const packagePath of packagePaths) {
     const workspacePath =
@@ -100,17 +112,27 @@ export class CopilotSetup {
     packagePaths = ".",
     playwrightInstall = false,
     firebaseTools = false,
-    javaDependency = false,
   ): Promise<string> {
     const packages = splitCsv(packagePaths);
-    const workspace = withWorkspace(source, nodeAuthToken, packages).withExec(
+    let container = dag.container().from("node:24-bookworm");
+
+    if (firebaseTools) {
+      container = withTooling(container, {
+        firebaseTools,
+      });
+    }
+
+    const workspace = withWorkspace(
+      container,
+      source,
+      nodeAuthToken,
+      packages,
+    ).withExec(
       [
         "bash",
         "-lc",
         buildScript(packages, {
           playwrightInstall,
-          firebaseTools,
-          javaDependency,
         }),
       ],
     );

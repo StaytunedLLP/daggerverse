@@ -14,4 +14,3 @@ Available switches:
 
 - `--playwright-install`
 - `--firebase-tools`
-- `--java-dependency`
