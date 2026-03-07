@@ -41,7 +41,7 @@ jobs:
         with:
           context: .
           file: ./arc-dagger/Dockerfile.runner
-          platforms: linux/arm64 # Target your Raspberry Pi architecture
+          platforms: linux/arm64,linux/amd64
           push: true
           tags: |
             ghcr.io/staytunedllp/st-arc-dagger-kubectl:latest
