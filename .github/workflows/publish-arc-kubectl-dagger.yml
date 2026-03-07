@@ -2,26 +2,67 @@ name: Publish Dagger Runner Image
 on:
   # schedule:
   #   - cron: "0 0 * * *" # Checks every night at midnight
-  workflow_dispatch: # Allows you to run it manually
+  workflow_dispatch:
+    inputs:
+      dagger_versions:
+        description: "Comma-separated Dagger versions to publish, for example: v0.20.0,v0.20.1. Leave empty to publish the latest release only."
+        required: false
+        default: ""
+        type: string
+      publish_latest:
+        description: "Also tag the latest resolved version as :latest"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
   packages: write
 
 jobs:
-  build-and-push:
+  resolve-versions:
     runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.resolve.outputs.versions }}
+      latest_version: ${{ steps.resolve.outputs.latest_version }}
+    steps:
+      - name: Resolve Dagger versions
+        id: resolve
+        run: |
+          set -euo pipefail
+
+          latest_version="$(curl -s https://api.github.com/repos/dagger/dagger/releases/latest | jq -r .tag_name)"
+          requested_versions="${{ inputs.dagger_versions }}"
+
+          if [ -z "${requested_versions}" ]; then
+            requested_versions="${latest_version}"
+          fi
+
+          versions_json="$(printf '%s' "${requested_versions}" \
+            | tr ',' '\n' \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+            | awk 'NF' \
+            | jq -R . \
+            | jq -s -c .)"
+
+          echo "versions=${versions_json}" >> "${GITHUB_OUTPUT}"
+          echo "latest_version=${latest_version}" >> "${GITHUB_OUTPUT}"
+
+  build-and-push:
+    needs: resolve-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dagger_version: ${{ fromJson(needs.resolve-versions.outputs.versions) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get Latest Dagger Version
-        id: dagger-version
+      - name: Show publish plan
         run: |
-          # Fetch the latest release tag from GitHub API
-          VERSION=$(curl -s https://api.github.com/repos/dagger/dagger/releases/latest | jq -r .tag_name)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Latest Dagger version is $VERSION"
+          echo "Publishing Dagger runner image for version: ${{ matrix.dagger_version }}"
+          echo "Resolved latest Dagger release: ${{ needs.resolve-versions.outputs.latest_version }}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36,6 +77,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image tags
+        id: tags
+        run: |
+          set -euo pipefail
+
+          image="ghcr.io/staytunedllp/st-arc-dagger-kubectl"
+          version="${{ matrix.dagger_version }}"
+          latest_version="${{ needs.resolve-versions.outputs.latest_version }}"
+
+          {
+            echo "value<<EOF"
+            echo "${image}:${version}"
+            if [ "${{ inputs.publish_latest }}" = "true" ] && [ "${version}" = "${latest_version}" ]; then
+              echo "${image}:latest"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
@@ -43,8 +102,6 @@ jobs:
           file: ./arc-dagger/Dockerfile.runner
           platforms: linux/arm64,linux/amd64
           push: true
-          tags: |
-            ghcr.io/staytunedllp/st-arc-dagger-kubectl:latest
-            ghcr.io/staytunedllp/st-arc-dagger-kubectl:${{ steps.dagger-version.outputs.version }}
+          tags: ${{ steps.tags.outputs.value }}
           build-args: |
-            DAGGER_VERSION=${{ steps.dagger-version.outputs.version }}
+            DAGGER_VERSION=${{ matrix.dagger_version }}
