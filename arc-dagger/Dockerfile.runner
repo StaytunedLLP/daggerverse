@@ -1,6 +1,7 @@
 FROM ghcr.io/actions/actions-runner:latest
 
 ARG DAGGER_VERSION
+ARG TARGETARCH
 USER root
 
 # Install dependencies
@@ -10,8 +11,8 @@ RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
 RUN curl -L https://dl.dagger.io/dagger/install.sh | \
     DAGGER_VERSION=${DAGGER_VERSION} BIN_DIR=/usr/local/bin sh
 
-# Install Kubectl (Latest ARM64)
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl" && \
+# Install kubectl for the target architecture so the same image tag works on ARM64 and AMD64 nodes.
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH}/kubectl" && \
     chmod +x kubectl && \
     mv kubectl /usr/local/bin/
 
