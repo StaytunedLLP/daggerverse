@@ -127,13 +127,13 @@ export class Firebase {
       }
 
       let existingEnvContent = "";
-      const frontendEntries = await configuredSrc.directory(frontendDir).entries();
+      const frontendDirRef = configuredSrc.directory(frontendDir);
+      const frontendEntries = await frontendDirRef.entries();
       if (frontendEntries.includes(".env")) {
         try {
-          existingEnvContent = await configuredSrc
-            .file(`${frontendDir}/.env`)
-            .contents();
+          existingEnvContent = await frontendDirRef.file(".env").contents();
         } catch {
+          // Silently ignore read errors, preserving original behavior.
           existingEnvContent = "";
         }
       }
