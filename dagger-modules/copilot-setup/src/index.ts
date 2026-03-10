@@ -9,6 +9,8 @@ import {
 
 const npmCache = dag.cacheVolume("npm-cache-node24");
 const playwrightCache = dag.cacheVolume("playwright-cache-node24");
+const playwrightCachePath = "/playwright-cache";
+const playwrightWorkspacePath = "/workspace/.playwright-browsers";
 
 function splitCsv(value: string): string[] {
   return value
@@ -19,6 +21,29 @@ function splitCsv(value: string): string[] {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function workspacePath(packagePath: string): string {
+  return packagePath === "." ? "/workspace" : `/workspace/${packagePath}`;
+}
+
+function writeNpmrcScript(npmrcPaths: string[]): string {
+  return [
+    "set -euo pipefail",
+    "cat > /tmp/staytuned.npmrc <<'EOF'",
+    "@staytunedllp:registry=https://npm.pkg.github.com",
+    "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+    "EOF",
+    `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
+    '  target="${path}"',
+    '  if [ "${target}" = "." ]; then',
+    "    cp /tmp/staytuned.npmrc /workspace/.npmrc",
+    "  else",
+    '    mkdir -p "/workspace/${target}"',
+    '    cp /tmp/staytuned.npmrc "/workspace/${target}/.npmrc"',
+    "  fi",
+    "done",
+  ].join("\n");
 }
 
 function withTooling(
@@ -45,7 +70,7 @@ function withTooling(
   return next;
 }
 
-function withWorkspace(
+function withMountedWorkspace(
   container: Container,
   source: Directory,
   nodeAuthToken: Secret,
@@ -57,47 +82,62 @@ function withWorkspace(
     .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
     .withMountedCache("/root/.npm", npmCache)
     .withMountedCache("/root/.cache/ms-playwright", playwrightCache)
-    .withExec([
-      "bash",
-      "-lc",
-      [
-        "set -euo pipefail",
-        "cat > /tmp/staytuned.npmrc <<'EOF'",
-        "@staytunedllp:registry=https://npm.pkg.github.com",
-        "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
-        "EOF",
-        `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
-        "  target=\"${path}\"",
-        "  if [ \"${target}\" = \".\" ]; then",
-        "    cp /tmp/staytuned.npmrc /workspace/.npmrc",
-        "  else",
-        "    mkdir -p \"/workspace/${target}\"",
-        "    cp /tmp/staytuned.npmrc \"/workspace/${target}/.npmrc\"",
-        "  fi",
-        "done",
-      ].join("\n"),
-    ]);
+    .withExec(["bash", "-lc", writeNpmrcScript(npmrcPaths)]);
+}
+
+function withCopiedWorkspace(
+  container: Container,
+  source: Directory,
+  nodeAuthToken: Secret,
+  npmrcPaths: string[],
+): Container {
+  return container
+    .withDirectory("/workspace", source)
+    .withWorkdir("/workspace")
+    .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
+    .withMountedCache("/root/.npm", npmCache)
+    .withMountedCache(playwrightCachePath, playwrightCache)
+    .withExec(["bash", "-lc", writeNpmrcScript(npmrcPaths)]);
 }
 
 function buildScript(
   packagePaths: string[],
   options: {
+    buildPaths: string[];
     playwrightInstall: boolean;
+    persistPlaywrightBrowsers: boolean;
   },
 ): string {
   const lines = ["set -euo pipefail"];
 
   for (const packagePath of packagePaths) {
-    const workspacePath =
-      packagePath === "." ? "/workspace" : `/workspace/${packagePath}`;
-
-    lines.push(`cd ${shellQuote(workspacePath)}`);
+    lines.push(`cd ${shellQuote(workspacePath(packagePath))}`);
     lines.push("npm ci");
+  }
+
+  for (const buildPath of options.buildPaths) {
+    lines.push(`cd ${shellQuote(workspacePath(buildPath))}`);
+    lines.push("npm run build");
   }
 
   if (options.playwrightInstall) {
     lines.push("cd /workspace");
+
+    if (options.persistPlaywrightBrowsers) {
+      lines.push(
+        `export PLAYWRIGHT_BROWSERS_PATH=${shellQuote(playwrightCachePath)}`,
+      );
+    }
+
     lines.push("npx playwright install --with-deps");
+
+    if (options.persistPlaywrightBrowsers) {
+      lines.push(`rm -rf ${shellQuote(playwrightWorkspacePath)}`);
+      lines.push(`mkdir -p ${shellQuote(playwrightWorkspacePath)}`);
+      lines.push(
+        `cp -R ${shellQuote(`${playwrightCachePath}/.`)} ${shellQuote(`${playwrightWorkspacePath}/`)}`,
+      );
+    }
   }
 
   return lines.join("\n");
@@ -122,21 +162,58 @@ export class CopilotSetup {
       });
     }
 
-    const workspace = withWorkspace(
+    const workspace = withMountedWorkspace(
       container,
       source,
       nodeAuthToken,
       packages,
-    ).withExec(
-      [
-        "bash",
-        "-lc",
-        buildScript(packages, {
-          playwrightInstall,
-        }),
-      ],
-    );
+    ).withExec([
+      "bash",
+      "-lc",
+      buildScript(packages, {
+        buildPaths: [],
+        playwrightInstall,
+        persistPlaywrightBrowsers: false,
+      }),
+    ]);
 
     return workspace.stdout();
+  }
+
+  @func()
+  async prepareNodeWorkspaceDirectory(
+    source: Directory,
+    nodeAuthToken: Secret,
+    packagePaths = ".",
+    buildPaths = "",
+    playwrightInstall = false,
+    firebaseTools = false,
+  ): Promise<Directory> {
+    const packages = splitCsv(packagePaths);
+    const builds = splitCsv(buildPaths);
+    let container = dag.container().from("node:24-bookworm");
+
+    if (firebaseTools) {
+      container = withTooling(container, {
+        firebaseTools,
+      });
+    }
+
+    const workspace = withCopiedWorkspace(
+      container,
+      source,
+      nodeAuthToken,
+      packages,
+    ).withExec([
+      "bash",
+      "-lc",
+      buildScript(packages, {
+        buildPaths: builds,
+        playwrightInstall,
+        persistPlaywrightBrowsers: true,
+      }),
+    ]);
+
+    return workspace.directory("/workspace");
   }
 }
