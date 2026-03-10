@@ -27,6 +27,14 @@ function workspacePath(packagePath: string): string {
   return packagePath === "." ? "/workspace" : `/workspace/${packagePath}`;
 }
 
+function relativeWorkspacePath(packagePath: string): string {
+  return packagePath === "." ? "." : packagePath;
+}
+
+function uniqueEntries(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
 function writeNpmrcScript(npmrcPaths: string[]): string {
   return [
     "set -euo pipefail",
@@ -143,6 +151,46 @@ function buildScript(
   return lines.join("\n");
 }
 
+function bundleEntries(
+  packagePaths: string[],
+  options: {
+    playwrightInstall: boolean;
+  },
+): string[] {
+  const entries = packagePaths.flatMap((packagePath) => {
+    const relativePath = relativeWorkspacePath(packagePath);
+    return relativePath === "." ?
+        [".npmrc", "node_modules"]
+      : [`${relativePath}/.npmrc`, `${relativePath}/node_modules`];
+  });
+
+  if (options.playwrightInstall) {
+    entries.push(".playwright-browsers");
+  }
+
+  return uniqueEntries(entries);
+}
+
+function bundleScript(entries: string[]): string {
+  return [
+    "set -euo pipefail",
+    "mkdir -p /bundle",
+    "entries=()",
+    ...entries.map((entry) => `entries+=(${shellQuote(entry)})`),
+    "existing=()",
+    'for entry in "${entries[@]}"; do',
+    '  if [ -e "/workspace/${entry}" ]; then',
+    '    existing+=("${entry}")',
+    "  fi",
+    "done",
+    'if [ "${#existing[@]}" -eq 0 ]; then',
+    '  echo "No bundle entries found to export" >&2',
+    "  exit 1",
+    "fi",
+    'tar -czf /bundle/copilot-workspace.tar.gz -C /workspace "${existing[@]}"',
+  ].join("\n");
+}
+
 @object()
 export class CopilotSetup {
   @func()
@@ -215,5 +263,50 @@ export class CopilotSetup {
     ]);
 
     return workspace.directory("/workspace");
+  }
+
+  @func()
+  async prepareNodeWorkspaceBundle(
+    source: Directory,
+    nodeAuthToken: Secret,
+    packagePaths = ".",
+    playwrightInstall = false,
+    firebaseTools = false,
+  ): Promise<Directory> {
+    const packages = splitCsv(packagePaths);
+    let container = dag.container().from("node:24-bookworm");
+
+    if (firebaseTools) {
+      container = withTooling(container, {
+        firebaseTools,
+      });
+    }
+
+    const workspace = withCopiedWorkspace(
+      container,
+      source,
+      nodeAuthToken,
+      packages,
+    ).withExec([
+      "bash",
+      "-lc",
+      buildScript(packages, {
+        buildPaths: [],
+        playwrightInstall,
+        persistPlaywrightBrowsers: true,
+      }),
+    ]);
+
+    const bundle = workspace.withExec([
+      "bash",
+      "-lc",
+      bundleScript(
+        bundleEntries(packages, {
+          playwrightInstall,
+        }),
+      ),
+    ]);
+
+    return bundle.directory("/bundle");
   }
 }

@@ -22,6 +22,17 @@ dagger call --output ./copilot-prepared prepare-node-workspace-directory \
   --playwright-install
 ```
 
+For a smaller, faster host handoff, export a compressed setup bundle instead of the
+entire prepared workspace:
+
+```bash
+dagger call --output ./copilot-bundle prepare-node-workspace-bundle \
+  --source . \
+  --node-auth-token env:NODE_AUTH_TOKEN \
+  --package-paths ".,sl-demos,sl-demos/src/apps/consumer" \
+  --playwright-install
+```
+
 Available switches:
 
 - `--playwright-install`
