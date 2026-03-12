@@ -97,7 +97,7 @@ function buildScript(
 
   if (options.playwrightInstall) {
     lines.push("cd /workspace");
-    lines.push("npm i playwright install --with-deps");
+    lines.push("npx playwright install --with-deps");
   }
 
   return lines.join("\n");
