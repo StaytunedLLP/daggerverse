@@ -51,8 +51,23 @@ function withWorkspace(
   nodeAuthToken: Secret,
   npmrcPaths: string[],
 ): Container {
+  // Filter source to only include package definitions
+  const packageDefinitions = dag.directory().withDirectory("/", source, {
+    include: [
+      "**/package.json",
+      "**/package-lock.json",
+      "**/package-lock.yaml",
+      "**/.npmrc",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+      "**/playwright.config.ts",
+      "**/playwright.config.js",
+      "**/playwright.config.mjs"
+    ],
+  });
+
   return container
-    .withMountedDirectory("/workspace", source)
+    .withDirectory("/workspace", packageDefinitions)
     .withWorkdir("/workspace")
     .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
     .withMountedCache("/root/.npm", npmCache)
@@ -97,7 +112,7 @@ function buildScript(
 
   if (options.playwrightInstall) {
     lines.push("cd /workspace");
-    lines.push("npm i playwright install --with-deps");
+    lines.push("./node_modules/.bin/playwright install --with-deps");
   }
 
   return lines.join("\n");
@@ -133,7 +148,9 @@ export class CopilotSetup {
       buildScript(packages, {
         playwrightInstall,
       }),
-    ]);
+    ]).withDirectory("/workspace", source, {
+      exclude: ["node_modules", "dist", ".git", "dagger"],
+    });
 
     return workspace.stdout();
   }

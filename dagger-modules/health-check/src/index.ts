@@ -26,10 +26,22 @@ function withWorkspace(
   nodeAuthToken: Secret,
   npmrcPaths: string[],
 ): Container {
+  // Filter source to only include package definitions
+  const packageDefinitions = dag.directory().withDirectory("/", source, {
+    include: [
+      "**/package.json",
+      "**/package-lock.json",
+      "**/package-lock.yaml",
+      "**/.npmrc",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+    ],
+  });
+
   return dag
     .container()
     .from("node:24-bookworm")
-    .withMountedDirectory("/workspace", source)
+    .withDirectory("/workspace", packageDefinitions)
     .withWorkdir("/workspace")
     .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
     .withMountedCache("/root/.npm", npmCache)
@@ -114,8 +126,8 @@ export class HealthCheck {
     verifyChromiumBidi = false,
   ): Promise<string> {
     const packages = splitCsv(packagePaths);
-    const workspace = withWorkspace(source, nodeAuthToken, packages).withExec(
-      [
+    const workspace = withWorkspace(source, nodeAuthToken, packages)
+      .withExec([
         "bash",
         "-lc",
         buildScript(packages, {
@@ -125,8 +137,10 @@ export class HealthCheck {
           format,
           verifyChromiumBidi,
         }),
-      ],
-    );
+      ])
+      .withDirectory("/workspace", source, {
+        exclude: ["node_modules", "dist", ".git", "dagger"],
+      });
 
     return workspace.stdout();
   }

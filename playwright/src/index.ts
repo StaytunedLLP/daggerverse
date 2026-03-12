@@ -54,7 +54,10 @@ export class Playwright {
                 "**/package-lock.yaml",
                 "**/.npmrc",
                 "**/yarn.lock",
-                "**/pnpm-lock.yaml"
+                "**/pnpm-lock.yaml",
+                "**/playwright.config.ts",
+                "**/playwright.config.js",
+                "**/playwright.config.mjs"
             ]
         })
 
@@ -80,6 +83,7 @@ export class Playwright {
                 "(cd \"$dir\" && npm ci --legacy-peer-deps) || exit 1; done"
             ])
             .withEnvVariable("PATH", "/src/node_modules/.bin:${PATH}", { expand: true })
+            .withExec(["sh", "-c", "./node_modules/.bin/playwright install --with-deps"])
 
         // -------------------------------------------------------------------------
         // 4. Copy Rest of Source
@@ -96,10 +100,6 @@ export class Playwright {
             built = fullSource.withExec(["npm", "run", "build"])
         }
 
-        // -------------------------------------------------------------------------
-        // 6. Playwright Browser & OS Dependency Installation
-        // -------------------------------------------------------------------------
-        const bws = built.withExec(["sh", "-c", "npx playwright install --with-deps"])
 
         // -------------------------------------------------------------------------
         // 7. Dynamic Test Execution
@@ -109,7 +109,7 @@ export class Playwright {
             cmd.push("--", testSelector)
         }
 
-        const testOutput = await bws.withExec(cmd).stdout()
+        const testOutput = await built.withExec(cmd).stdout()
 
         return testOutput
     }
