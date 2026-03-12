@@ -67,12 +67,12 @@ function withWorkspace(
         "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
         "EOF",
         `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
-        "  target=\"${path}\"",
-        "  if [ \"${target}\" = \".\" ]; then",
+        '  target="${path}"',
+        '  if [ "${target}" = "." ]; then',
         "    cp /tmp/staytuned.npmrc /workspace/.npmrc",
         "  else",
-        "    mkdir -p \"/workspace/${target}\"",
-        "    cp /tmp/staytuned.npmrc \"/workspace/${target}/.npmrc\"",
+        '    mkdir -p "/workspace/${target}"',
+        '    cp /tmp/staytuned.npmrc "/workspace/${target}/.npmrc"',
         "  fi",
         "done",
       ].join("\n"),
@@ -97,7 +97,7 @@ function buildScript(
 
   if (options.playwrightInstall) {
     lines.push("cd /workspace");
-    lines.push("npx playwright install --with-deps");
+    lines.push("npm i playwright install --with-deps");
   }
 
   return lines.join("\n");
@@ -127,15 +127,13 @@ export class CopilotSetup {
       source,
       nodeAuthToken,
       packages,
-    ).withExec(
-      [
-        "bash",
-        "-lc",
-        buildScript(packages, {
-          playwrightInstall,
-        }),
-      ],
-    );
+    ).withExec([
+      "bash",
+      "-lc",
+      buildScript(packages, {
+        playwrightInstall,
+      }),
+    ]);
 
     return workspace.stdout();
   }
