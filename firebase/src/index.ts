@@ -147,10 +147,15 @@ export class Firebase {
           }
         }
 
-        let envContent = fs.readFileSync('.env', 'utf-8');
-        // Ensure it ends with a newline if it has content
-        if (envContent.length > 0 && !envContent.endsWith('\\n')) {
-          envContent += '\\n';
+      let existingEnvContent = "";
+      const frontendDirRef = configuredSrc.directory(frontendDir);
+      const frontendEntries = await frontendDirRef.entries();
+      if (frontendEntries.includes(".env")) {
+        try {
+          existingEnvContent = await frontendDirRef.file(".env").contents();
+        } catch {
+          // Silently ignore read errors, preserving original behavior.
+          existingEnvContent = "";
         }
 
         const envEntries = {
