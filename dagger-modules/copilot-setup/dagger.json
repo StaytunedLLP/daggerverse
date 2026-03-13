@@ -2,5 +2,5 @@
   "name": "copilot-setup",
   "sdk": "typescript",
   "source": ".",
-  "engineVersion": "v0.20.1"
+  "engineVersion": "v0.20.0"
 }
