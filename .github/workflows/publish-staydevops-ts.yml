@@ -2,9 +2,9 @@ name: Publish Staydevops TS Package
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - staydevops-ts-v*
+  release:
+    types:
+      - published
 
 permissions:
   contents: read
