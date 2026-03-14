@@ -29,6 +29,11 @@ jobs:
         working-directory: .
         run: npm ci
 
+      - name: Authenticate to GitHub Packages
+        run: |
+          echo "@staytunedllp:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+
       - name: Build package
         working-directory: .
         run: npm run build
