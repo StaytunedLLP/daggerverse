@@ -1,0 +1,40 @@
+name: Publish Staydevops TS Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - staydevops-ts-v*
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@staytunedllp"
+
+      - name: Install package dependencies
+        working-directory: .
+        run: npm ci
+
+      - name: Build package
+        working-directory: .
+        run: npm run build
+
+      - name: Publish package
+        working-directory: .
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
