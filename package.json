@@ -1,6 +1,6 @@
 {
-  "name": "@staytunedllp/staydevops-ts",
-  "version": "1.0.1",
+  "name": "@staytunedllp/daggerverse",
+  "version": "1.0.3",
   "description": "Shared TypeScript helpers for Staytuned Dagger modules",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
   },
@@ -23,10 +23,13 @@
     "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
-    "@dagger.io/dagger": "^0.20.0"
+    "@dagger.io/dagger": "^0.20.1"
   },
   "devDependencies": {
-    "@dagger.io/dagger": "^0.20.0",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@dagger.io/dagger": "^0.20.1",
+    "typescript": "5.9.3"
   }
 }
