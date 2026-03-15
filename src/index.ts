@@ -1,4 +1,4 @@
-export * from "./staydevops.js";
+export * from "./staydevops-ts.js";
 export * from "./shared/index.js";
 export * from "./checks/index.js";
 export * from "./copilot/index.js";
