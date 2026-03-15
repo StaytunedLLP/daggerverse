@@ -10,23 +10,26 @@ import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
 import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
-import { resolveNodeAuthToken } from "./shared/auth.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
 
+/**
+ * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
+ */
 @object()
 export class StaydevopsTs {
   private async runDefaultCheck(
     source: Directory,
     mode: CheckMode,
   ): Promise<void> {
-    const nodeAuthToken = resolveNodeAuthToken();
-
-    await runNodeChecks(source, nodeAuthToken, {
+    await runNodeChecks(source, undefined, {
       [mode]: true,
     });
   }
 
+  /**
+   * Run the repository formatting check with `npm run format:check`.
+   */
   @check()
   async format(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
@@ -35,6 +38,9 @@ export class StaydevopsTs {
     await this.runDefaultCheck(source, "format");
   }
 
+  /**
+   * Run the repository linter with `npm run lint`.
+   */
   @check()
   async lint(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
@@ -43,6 +49,9 @@ export class StaydevopsTs {
     await this.runDefaultCheck(source, "lint");
   }
 
+  /**
+   * Run the repository build with `npm run build`.
+   */
   @check()
   async build(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
@@ -51,6 +60,9 @@ export class StaydevopsTs {
     await this.runDefaultCheck(source, "build");
   }
 
+  /**
+   * Run the repository test suite with `npm run test`.
+   */
   @check()
   async test(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
@@ -59,6 +71,9 @@ export class StaydevopsTs {
     await this.runDefaultCheck(source, "test");
   }
 
+  /**
+   * Validate that `chromium-bidi` is installed in the selected package path.
+   */
   @func()
   async verifyChromiumBidi(
     source: Directory,
@@ -71,6 +86,9 @@ export class StaydevopsTs {
     });
   }
 
+  /**
+   * Install Node dependencies and optionally provision Playwright and Firebase tooling.
+   */
   @func()
   async prepareNodeWorkspace(
     source: Directory,
@@ -86,6 +104,9 @@ export class StaydevopsTs {
     });
   }
 
+  /**
+   * Build and deploy a Firebase web hosting project from the provided source tree.
+   */
   @func({ cache: "never" })
   async deployWebhosting(
     source: Directory,
