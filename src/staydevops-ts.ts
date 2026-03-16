@@ -134,7 +134,7 @@ export class StaydevopsTs {
     packagePaths = ".",
     playwrightInstall = false,
     firebaseTools = false,
-  ): Promise<string> {
+  ): Promise<Directory> {
     return prepareNodeWorkspace(source, nodeAuthToken, {
       packagePaths,
       playwrightInstall,

@@ -1,7 +1,9 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 import {
   DEFAULT_PLAYWRIGHT_BROWSERS,
+  DEFAULT_WORKSPACE,
   createNodeWorkspace,
+  withFullSource,
   withPlaywrightBrowsers,
   withPlaywrightSystemDeps,
 } from "../shared/index.js";
@@ -13,7 +15,7 @@ export async function prepareNodeWorkspace(
   source: Directory,
   nodeAuthToken?: Secret,
   options: CopilotWorkspaceOptions = {},
-): Promise<string> {
+): Promise<Directory> {
   const packagePaths = normalizePaths(options.packagePaths);
 
   let container = createNodeWorkspace(source, nodeAuthToken, {
@@ -37,5 +39,5 @@ export async function prepareNodeWorkspace(
     });
   }
 
-  return container.stdout();
+  return withFullSource(container, source).directory(DEFAULT_WORKSPACE);
 }
