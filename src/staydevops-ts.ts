@@ -37,13 +37,14 @@ export class StaydevopsTs {
 
   /**
    * Run the repository formatting check with `npm run format:check`.
+   *
+   * @param source Repository source directory to validate.
    */
   @check()
   async format(
     @argument({
       defaultPath: ".",
       ignore: DEFAULT_SOURCE_EXCLUDES,
-      description: "Repository source directory to validate.",
     })
     source?: Directory,
   ): Promise<void> {
@@ -52,13 +53,14 @@ export class StaydevopsTs {
 
   /**
    * Run the repository linter with `npm run lint`.
+   *
+   * @param source Repository source directory to lint.
    */
   @check()
   async lint(
     @argument({
       defaultPath: ".",
       ignore: DEFAULT_SOURCE_EXCLUDES,
-      description: "Repository source directory to lint.",
     })
     source?: Directory,
   ): Promise<void> {
@@ -67,13 +69,14 @@ export class StaydevopsTs {
 
   /**
    * Run the repository build with `npm run build`.
+   *
+   * @param source Repository source directory to build.
    */
   @check()
   async build(
     @argument({
       defaultPath: ".",
       ignore: DEFAULT_SOURCE_EXCLUDES,
-      description: "Repository source directory to build.",
     })
     source?: Directory,
   ): Promise<void> {
@@ -82,13 +85,14 @@ export class StaydevopsTs {
 
   /**
    * Run the repository test suite with `npm run test`.
+   *
+   * @param source Repository source directory to test.
    */
   @check()
   async test(
     @argument({
       defaultPath: ".",
       ignore: DEFAULT_SOURCE_EXCLUDES,
-      description: "Repository source directory to test.",
     })
     source?: Directory,
   ): Promise<void> {
@@ -97,22 +101,15 @@ export class StaydevopsTs {
 
   /**
    * Validate that `chromium-bidi` is installed in the selected package path.
+   *
+   * @param source Repository source directory that contains the package to inspect.
+   * @param nodeAuthToken Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
    */
   @func()
   async verifyChromiumBidi(
-    @argument({
-      description: "Repository source directory that contains the package to inspect.",
-    })
     source: Directory,
-    @argument({
-      description:
-        "Optional GitHub Packages token secret. Required only when installing private npm packages.",
-    })
     nodeAuthToken?: Secret,
-    @argument({
-      description:
-        "Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.",
-    })
     packagePaths = ".",
   ): Promise<string> {
     return runNodeChecks(source, nodeAuthToken, {
@@ -123,32 +120,19 @@ export class StaydevopsTs {
 
   /**
    * Install Node dependencies and optionally provision Playwright and Firebase tooling.
+   *
+   * @param source Repository source directory to install into the workspace container.
+   * @param nodeAuthToken Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths Package path or comma-separated package paths relative to the source root where npm installs should run.
+   * @param playwrightInstall When true, installs Playwright system dependencies and Chromium into the prepared workspace.
+   * @param firebaseTools When true, installs Firebase CLI tooling in the prepared workspace container.
    */
   @func()
   async prepareNodeWorkspace(
-    @argument({
-      description: "Repository source directory to install into the workspace container.",
-    })
     source: Directory,
-    @argument({
-      description:
-        "Optional GitHub Packages token secret. Required only when installing private npm packages.",
-    })
     nodeAuthToken?: Secret,
-    @argument({
-      description:
-        "Package path or comma-separated package paths relative to the source root where npm installs should run.",
-    })
     packagePaths = ".",
-    @argument({
-      description:
-        "When true, installs Playwright system dependencies and Chromium into the prepared workspace.",
-    })
     playwrightInstall = false,
-    @argument({
-      description:
-        "When true, installs Firebase CLI tooling in the prepared workspace container.",
-    })
     firebaseTools = false,
   ): Promise<string> {
     return prepareNodeWorkspace(source, nodeAuthToken, {
@@ -160,62 +144,31 @@ export class StaydevopsTs {
 
   /**
    * Build and deploy a Firebase web hosting project from the provided source tree.
+   *
+   * @param source Repository source directory containing the Firebase project and any frontend or backend packages.
+   * @param projectId Firebase project ID used for the deploy command and frontend environment generation.
+   * @param gcpCredentials GCP service account JSON secret used for Firebase deployment authentication.
+   * @param appId Optional Firebase app ID to inject into frontend environment variables before building.
+   * @param only Optional Firebase deploy target selector passed to `firebase deploy --only`.
+   * @param frontendDir Optional frontend package directory to build before deployment, relative to the source root.
+   * @param backendDir Optional backend or secondary package directory whose dependencies should be installed before deployment.
+   * @param firebaseDir Optional directory containing `firebase.json`. Defaults to the workspace root.
+   * @param webappConfig Optional secret containing Firebase web app config JSON to write into frontend environment variables.
+   * @param extraEnv Optional secret containing extra `.env` lines appended before the frontend build runs.
+   * @param nodeAuthToken Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.
    */
   @func({ cache: "never" })
   async deployWebhosting(
-    @argument({
-      description:
-        "Repository source directory containing the Firebase project and any frontend or backend packages.",
-    })
     source: Directory,
-    @argument({
-      description: "Firebase project ID used for the deploy command and frontend environment generation.",
-    })
     projectId: string,
-    @argument({
-      description:
-        "GCP service account JSON secret used for Firebase deployment authentication.",
-    })
     gcpCredentials: Secret,
-    @argument({
-      description:
-        "Optional Firebase app ID to inject into frontend environment variables before building.",
-    })
     appId?: string,
-    @argument({
-      description:
-        "Optional Firebase deploy target selector passed to `firebase deploy --only`.",
-    })
     only?: string,
-    @argument({
-      description:
-        "Optional frontend package directory to build before deployment, relative to the source root.",
-    })
     frontendDir?: string,
-    @argument({
-      description:
-        "Optional backend or secondary package directory whose dependencies should be installed before deployment.",
-    })
     backendDir?: string,
-    @argument({
-      description:
-        "Optional directory containing `firebase.json`. Defaults to the workspace root.",
-    })
     firebaseDir?: string,
-    @argument({
-      description:
-        "Optional secret containing Firebase web app config JSON to write into frontend environment variables.",
-    })
     webappConfig?: Secret,
-    @argument({
-      description:
-        "Optional secret containing extra `.env` lines appended before the frontend build runs.",
-    })
     extraEnv?: Secret,
-    @argument({
-      description:
-        "Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.",
-    })
     nodeAuthToken?: Secret,
   ): Promise<string> {
     return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
