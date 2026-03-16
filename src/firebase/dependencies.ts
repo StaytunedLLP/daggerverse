@@ -1,6 +1,6 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 import { DEFAULT_REGISTRY_SCOPE } from "../shared/constants.js";
-import { resolveNodeAuthToken } from "../shared/auth.js";
+import { maybeResolveNodeAuthToken } from "../shared/auth.js";
 import { withNpmAuth } from "../shared/npm.js";
 import { firebaseNodeBase } from "./base.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
@@ -16,9 +16,10 @@ export async function installFirebaseDependencies(
   options: FirebaseInstallOptions = {},
 ): Promise<Directory> {
   let container = firebaseNodeBase();
+  const resolvedNodeAuthToken = maybeResolveNodeAuthToken(options.nodeAuthToken);
 
-  if (options.nodeAuthToken || process.env.NODE_AUTH_TOKEN || process.env.GITHUB_TOKEN) {
-    container = withNpmAuth(container, resolveNodeAuthToken(options.nodeAuthToken), {
+  if (resolvedNodeAuthToken) {
+    container = withNpmAuth(container, resolvedNodeAuthToken, {
       workspace: FIREBASE_WORKDIR,
       npmrcPaths: directories,
       registryScope: options.registryScope ?? DEFAULT_REGISTRY_SCOPE,

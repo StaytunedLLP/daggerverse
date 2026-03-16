@@ -13,16 +13,24 @@ import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
 
+function requireSource(source?: Directory): Directory {
+  if (!source) {
+    throw new Error("source is required");
+  }
+
+  return source;
+}
+
 /**
  * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
  */
 @object()
 export class StaydevopsTs {
   private async runDefaultCheck(
-    source: Directory,
+    source: Directory | undefined,
     mode: CheckMode,
   ): Promise<void> {
-    await runNodeChecks(source, undefined, {
+    await runNodeChecks(requireSource(source), undefined, {
       [mode]: true,
     });
   }
@@ -33,7 +41,7 @@ export class StaydevopsTs {
   @check()
   async format(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
-    source: Directory,
+    source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "format");
   }
@@ -44,7 +52,7 @@ export class StaydevopsTs {
   @check()
   async lint(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
-    source: Directory,
+    source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "lint");
   }
@@ -55,7 +63,7 @@ export class StaydevopsTs {
   @check()
   async build(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
-    source: Directory,
+    source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "build");
   }
@@ -66,7 +74,7 @@ export class StaydevopsTs {
   @check()
   async test(
     @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
-    source: Directory,
+    source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
   }
