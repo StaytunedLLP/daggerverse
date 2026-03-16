@@ -40,7 +40,11 @@ export class StaydevopsTs {
    */
   @check()
   async format(
-    @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
+    @argument({
+      defaultPath: ".",
+      ignore: DEFAULT_SOURCE_EXCLUDES,
+      description: "Repository source directory to validate.",
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "format");
@@ -51,7 +55,11 @@ export class StaydevopsTs {
    */
   @check()
   async lint(
-    @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
+    @argument({
+      defaultPath: ".",
+      ignore: DEFAULT_SOURCE_EXCLUDES,
+      description: "Repository source directory to lint.",
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "lint");
@@ -62,7 +70,11 @@ export class StaydevopsTs {
    */
   @check()
   async build(
-    @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
+    @argument({
+      defaultPath: ".",
+      ignore: DEFAULT_SOURCE_EXCLUDES,
+      description: "Repository source directory to build.",
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "build");
@@ -73,7 +85,11 @@ export class StaydevopsTs {
    */
   @check()
   async test(
-    @argument({ defaultPath: ".", ignore: DEFAULT_SOURCE_EXCLUDES })
+    @argument({
+      defaultPath: ".",
+      ignore: DEFAULT_SOURCE_EXCLUDES,
+      description: "Repository source directory to test.",
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
@@ -84,8 +100,19 @@ export class StaydevopsTs {
    */
   @func()
   async verifyChromiumBidi(
+    @argument({
+      description: "Repository source directory that contains the package to inspect.",
+    })
     source: Directory,
+    @argument({
+      description:
+        "Optional GitHub Packages token secret. Required only when installing private npm packages.",
+    })
     nodeAuthToken?: Secret,
+    @argument({
+      description:
+        "Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.",
+    })
     packagePaths = ".",
   ): Promise<string> {
     return runNodeChecks(source, nodeAuthToken, {
@@ -99,10 +126,29 @@ export class StaydevopsTs {
    */
   @func()
   async prepareNodeWorkspace(
+    @argument({
+      description: "Repository source directory to install into the workspace container.",
+    })
     source: Directory,
+    @argument({
+      description:
+        "Optional GitHub Packages token secret. Required only when installing private npm packages.",
+    })
     nodeAuthToken?: Secret,
+    @argument({
+      description:
+        "Package path or comma-separated package paths relative to the source root where npm installs should run.",
+    })
     packagePaths = ".",
+    @argument({
+      description:
+        "When true, installs Playwright system dependencies and Chromium into the prepared workspace.",
+    })
     playwrightInstall = false,
+    @argument({
+      description:
+        "When true, installs Firebase CLI tooling in the prepared workspace container.",
+    })
     firebaseTools = false,
   ): Promise<string> {
     return prepareNodeWorkspace(source, nodeAuthToken, {
@@ -117,16 +163,59 @@ export class StaydevopsTs {
    */
   @func({ cache: "never" })
   async deployWebhosting(
+    @argument({
+      description:
+        "Repository source directory containing the Firebase project and any frontend or backend packages.",
+    })
     source: Directory,
+    @argument({
+      description: "Firebase project ID used for the deploy command and frontend environment generation.",
+    })
     projectId: string,
+    @argument({
+      description:
+        "GCP service account JSON secret used for Firebase deployment authentication.",
+    })
     gcpCredentials: Secret,
+    @argument({
+      description:
+        "Optional Firebase app ID to inject into frontend environment variables before building.",
+    })
     appId?: string,
+    @argument({
+      description:
+        "Optional Firebase deploy target selector passed to `firebase deploy --only`.",
+    })
     only?: string,
+    @argument({
+      description:
+        "Optional frontend package directory to build before deployment, relative to the source root.",
+    })
     frontendDir?: string,
+    @argument({
+      description:
+        "Optional backend or secondary package directory whose dependencies should be installed before deployment.",
+    })
     backendDir?: string,
+    @argument({
+      description:
+        "Optional directory containing `firebase.json`. Defaults to the workspace root.",
+    })
     firebaseDir?: string,
+    @argument({
+      description:
+        "Optional secret containing Firebase web app config JSON to write into frontend environment variables.",
+    })
     webappConfig?: Secret,
+    @argument({
+      description:
+        "Optional secret containing extra `.env` lines appended before the frontend build runs.",
+    })
     extraEnv?: Secret,
+    @argument({
+      description:
+        "Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.",
+    })
     nodeAuthToken?: Secret,
   ): Promise<string> {
     return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
