@@ -16,9 +16,11 @@ This repository contains the `staydevops-ts` Dagger module, which provides share
 
 ## Development Guidelines
 - This is a Dagger module written in TypeScript.
-- Follow Dagger SDK patterns for all core types and interactions as defined in the [Dagger API Reference](https://docs.dagger.io/getting-started/types).
-- Use TSDoc for all public-facing module members to ensure they are documented in Daggerverse.
-- When adding new functionality, export it from `src/index.ts`.
+- **Decorator Safety**: Do NOT use imported constants inside decorators (e.g., `@argument({ ignore: CONSTANT })`). Inline the values to prevent Dagger Engine introspection crashes.
+- **Visibility**: Use both `@check()` and `@func()` decorators for validation methods to ensure they appear in both `dagger check -l` and `dagger functions`.
+- **Command Consistency**: Examples with custom arguments (like `--source`) must use `dagger call`. Use `dagger check` only for general, argument-free validation runs.
+- **TSDoc**: Use TSDoc for all public-facing module members to ensure they are documented in Daggerverse.
+- **Exports**: When adding new functionality, export it from `src/index.ts`.
 
 ## Testing
 - Local verification: Run `npm run build` to ensure TypeScript compilation passes.
