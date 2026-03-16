@@ -39,6 +39,7 @@ export class StaydevopsTs {
    * Run the repository formatting check with `npm run format:check`.
    *
    * @param source Repository source directory to validate.
+   * @example dagger call format --source .
    */
   @check()
   async format(
@@ -55,6 +56,7 @@ export class StaydevopsTs {
    * Run the repository linter with `npm run lint`.
    *
    * @param source Repository source directory to lint.
+   * @example dagger call lint --source .
    */
   @check()
   async lint(
@@ -71,6 +73,7 @@ export class StaydevopsTs {
    * Run the repository build with `npm run build`.
    *
    * @param source Repository source directory to build.
+   * @example dagger call build --source .
    */
   @check()
   async build(
@@ -87,6 +90,7 @@ export class StaydevopsTs {
    * Run the repository test suite with `npm run test`.
    *
    * @param source Repository source directory to test.
+   * @example dagger call test --source .
    */
   @check()
   async test(
@@ -105,6 +109,7 @@ export class StaydevopsTs {
    * @param source Repository source directory that contains the package to inspect.
    * @param nodeAuthToken Optional GitHub Packages token secret. Required only when installing private npm packages.
    * @param packagePaths Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
+   * @example dagger call verify-chromium-bidi --source . --package-paths "./apps/web"
    */
   @func()
   async verifyChromiumBidi(
@@ -126,6 +131,7 @@ export class StaydevopsTs {
    * @param packagePaths Package path or comma-separated package paths relative to the source root where npm installs should run.
    * @param playwrightInstall When true, installs Playwright system dependencies and Chromium into the prepared workspace.
    * @param firebaseTools When true, installs Firebase CLI tooling in the prepared workspace container.
+   * @example dagger call prepare-node-workspace --source . --playwright-install
    */
   @func()
   async prepareNodeWorkspace(
@@ -156,6 +162,7 @@ export class StaydevopsTs {
    * @param webappConfig Optional secret containing Firebase web app config JSON to write into frontend environment variables.
    * @param extraEnv Optional secret containing extra `.env` lines appended before the frontend build runs.
    * @param nodeAuthToken Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.
+   * @example dagger call deploy-webhosting --source . --project-id "my-firebase-project" --gcp-credentials env:GCP_CREDENTIALS
    */
   @func({ cache: "never" })
   async deployWebhosting(
