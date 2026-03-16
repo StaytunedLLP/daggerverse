@@ -44,11 +44,9 @@ export class StaydevopsTs {
    * dagger call format --source .
    */
   @check()
+  @func()
   async format(
-    @argument({
-      defaultPath: ".",
-      ignore: DEFAULT_SOURCE_EXCLUDES,
-    })
+    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "format");
@@ -63,11 +61,9 @@ export class StaydevopsTs {
    * dagger call lint --source .
    */
   @check()
+  @func()
   async lint(
-    @argument({
-      defaultPath: ".",
-      ignore: DEFAULT_SOURCE_EXCLUDES,
-    })
+    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "lint");
@@ -82,11 +78,9 @@ export class StaydevopsTs {
    * dagger call build --source .
    */
   @check()
+  @func()
   async build(
-    @argument({
-      defaultPath: ".",
-      ignore: DEFAULT_SOURCE_EXCLUDES,
-    })
+    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "build");
@@ -101,11 +95,9 @@ export class StaydevopsTs {
    * dagger call test --source .
    */
   @check()
+  @func()
   async test(
-    @argument({
-      defaultPath: ".",
-      ignore: DEFAULT_SOURCE_EXCLUDES,
-    })
+    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
