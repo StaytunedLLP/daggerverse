@@ -151,7 +151,7 @@ export function withFullSource(
       "-lc",
       [
         STRICT_SHELL_HEADER,
-        `cp -a ${tempPath}/. ${shellQuote(workspace)}/`,
+        `tar -C ${tempPath} -cf - . | tar -C ${shellQuote(workspace)} -xf -`,
         `rm -rf ${tempPath}`,
       ].join("\n"),
     ]);
