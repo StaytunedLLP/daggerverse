@@ -47,9 +47,7 @@ export async function runPlaywrightTests(
     browsers,
   });
 
-  container = withFullSource(container, source, {
-    packagePaths,
-  });
+  container = withFullSource(container, source);
 
   if (options.runBuild ?? true) {
     container = runNpmScript(container, "build", {

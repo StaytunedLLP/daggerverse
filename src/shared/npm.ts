@@ -127,28 +127,23 @@ export function withFullSource(
   options: SourceOptions = {},
 ): Container {
   const workspace = options.workspace ?? DEFAULT_WORKSPACE;
-  const packagePaths = normalizePaths(options.packagePaths);
   const exclude = options.exclude ?? DEFAULT_SOURCE_EXCLUDES;
 
-  // Capture existing node_modules from the container to preserve them
-  const modulesToRestore: Array<{ path: string; dir: Directory }> = [];
-  for (const p of packagePaths) {
-    const nodeModulesPath = resolveWorkspacePath(workspace, `${p}/node_modules`);
-    modulesToRestore.push({
-      path: nodeModulesPath,
-      dir: container.directory(nodeModulesPath),
-    });
-  }
+  // We want to overlay the source code onto the container's workspace
+  // while preserving any existing state (node_modules, .npmrc, etc.).
+  // Dagger's withDirectory replaces the target path entirely.
+  // To achieve "overlay" semantics, we copy to a temp path and then merge.
+  const tempPath = "/tmp/dagger-source-overlay";
 
-  // Overlay the source (this replaces the workspace and wipes node_modules)
-  let result = container.withDirectory(workspace, source, {
-    exclude,
-  });
-
-  // Restore the node_modules
-  for (const { path, dir } of modulesToRestore) {
-    result = result.withDirectory(path, dir);
-  }
-
-  return result;
+  return container
+    .withDirectory(tempPath, source, { exclude })
+    .withExec([
+      "bash",
+      "-lc",
+      [
+        STRICT_SHELL_HEADER,
+        `cp -a ${tempPath}/. ${shellQuote(workspace)}/`,
+        `rm -rf ${tempPath}`,
+      ].join("\n"),
+    ]);
 }

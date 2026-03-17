@@ -39,7 +39,5 @@ export async function prepareNodeWorkspace(
     });
   }
 
-  return withFullSource(container, source, {
-    packagePaths,
-  }).directory(DEFAULT_WORKSPACE);
+  return withFullSource(container, source).directory(DEFAULT_WORKSPACE);
 }

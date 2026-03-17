@@ -28,7 +28,6 @@ export type InstallOptions = {
 export type SourceOptions = {
   workspace?: string;
   exclude?: string[];
-  packagePaths?: PathInput;
 };
 
 export type PlaywrightOptions = {
