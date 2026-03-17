@@ -190,9 +190,8 @@ export class StaydevopsTs {
     runBuild = true,
     registryScope = "staytunedllp",
     browsers = "chromium",
-    updateSnapshots = false,
-  ): Promise<string | Directory> {
-    const container = await runPlaywrightTests(source, {
+  ): Promise<string> {
+    return runPlaywrightTests(source, {
       nodeAuthToken,
       packagePaths,
       testSelector,
@@ -200,14 +199,7 @@ export class StaydevopsTs {
       runBuild,
       registryScope,
       browsers,
-      updateSnapshots,
     });
-
-    if (updateSnapshots) {
-      return container.directory(".");
-    }
-
-    return container.stdout();
   }
 
   /**

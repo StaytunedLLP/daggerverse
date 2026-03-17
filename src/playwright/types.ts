@@ -8,5 +8,4 @@ export type PlaywrightTestOptions = {
   runBuild?: boolean;
   registryScope?: string;
   browsers?: string;
-  updateSnapshots?: boolean;
 };
