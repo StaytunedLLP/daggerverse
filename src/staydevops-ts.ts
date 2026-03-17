@@ -9,6 +9,11 @@ import {
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
+import {
+  gitDiffBetweenCommits,
+  gitDiffPrevious,
+  gitDiffStaged,
+} from "./git/index.js";
 import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
@@ -50,6 +55,56 @@ export class StaydevopsTs {
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "format");
+  }
+
+  /**
+   * Retrieves an array of files that are staged for commit.
+   *
+   * @param source - The source directory to check for staged files.
+   *
+   * @example
+   * dagger call git-diff-staged --source .
+   */
+  @func()
+  async gitDiffStaged(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    source: Directory,
+  ): Promise<string[]> {
+    return gitDiffStaged(source);
+  }
+
+  /**
+   * Retrieves an array of files from the previous commit.
+   *
+   * @param source - The source directory to check for files in the previous commit.
+   *
+   * @example
+   * dagger call git-diff-previous --source .
+   */
+  @func()
+  async gitDiffPrevious(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    source: Directory,
+  ): Promise<string[]> {
+    return gitDiffPrevious(source);
+  }
+
+  /**
+   * Retrieves an array of files that have changed between two commits.
+   *
+   * @param source - The source directory to check for files in the commit range.
+   * @param commitRange - A string specifying the range of commits.
+   *
+   * @example
+   * dagger call git-diff-between-commits --source . --commit-range "HEAD~2..HEAD"
+   */
+  @func()
+  async gitDiffBetweenCommits(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    source: Directory,
+    commitRange: string,
+  ): Promise<string[]> {
+    return gitDiffBetweenCommits(source, commitRange);
   }
 
   /**
