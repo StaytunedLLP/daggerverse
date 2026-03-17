@@ -1,6 +1,0 @@
-{
-    "name": "playwright",
-    "sdk": "typescript",
-    "source": ".",
-    "engineVersion": "v0.20.0"
-}
