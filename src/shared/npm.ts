@@ -15,17 +15,26 @@ import type {
 } from "./types.js";
 
 function manifestIncludePatterns(packagePaths: PathInput | undefined): string[] {
-  return normalizePaths(packagePaths).flatMap((packagePath) => {
-    if (packagePath === ".") {
-      return [".npmrc", "package-lock.json", "package.json"];
-    }
+  const paths = normalizePaths(packagePaths);
+  const patterns: string[] = [];
 
-    return [
-      `${packagePath}/.npmrc`,
-      `${packagePath}/package-lock.json`,
-      `${packagePath}/package.json`,
-    ];
-  });
+  for (const path of paths) {
+    if (path === ".") {
+      // For root installs, include all manifests in the tree to support monorepo linking
+      patterns.push("**/.npmrc", "**/package-lock.json", "**/package.json");
+    } else {
+      patterns.push(
+        `${path}/.npmrc`,
+        `${path}/package-lock.json`,
+        `${path}/package.json`,
+      );
+    }
+  }
+
+  // Ensure root manifests are always included as they are required for npm ci in monorepos
+  patterns.push(".npmrc", "package-lock.json", "package.json");
+
+  return [...new Set(patterns)];
 }
 
 function buildManifestDirectory(
