@@ -14,6 +14,7 @@ import {
   gitDiffPrevious,
   gitDiffStaged,
 } from "./git/index.js";
+import { runPlaywrightTests } from "./playwright/index.js";
 import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
@@ -51,7 +52,10 @@ export class StaydevopsTs {
   @check()
   @func()
   async format(
-    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "format");
@@ -118,7 +122,10 @@ export class StaydevopsTs {
   @check()
   @func()
   async lint(
-    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "lint");
@@ -135,7 +142,10 @@ export class StaydevopsTs {
   @check()
   @func()
   async build(
-    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "build");
@@ -152,7 +162,10 @@ export class StaydevopsTs {
   @check()
   @func()
   async test(
-    @argument({ defaultPath: ".", ignore: [".git", "dagger", "dist", "node_modules"] })
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
@@ -204,6 +217,43 @@ export class StaydevopsTs {
       packagePaths,
       playwrightInstall,
       firebaseTools,
+    });
+  }
+
+  /**
+   * Run Playwright E2E tests for a package inside the provided source tree.
+   *
+   * @param source - Repository source directory containing Playwright tests.
+   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for build/test execution.
+   * @param testSelector - Optional selector/path passed to the npm test script using `--`.
+   * @param testScript - Npm script to run for tests. Defaults to `test:e2e`.
+   * @param runBuild - When true, runs `npm run build` before executing tests.
+   * @param registryScope - GitHub Packages scope used when authenticating npm.
+   * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
+   *
+   * @example
+   * dagger call playwright-test --source . --package-paths "apps/web"
+   */
+  @func()
+  async playwrightTest(
+    source: Directory,
+    nodeAuthToken?: Secret,
+    packagePaths = ".",
+    testSelector = "",
+    testScript = "test:e2e",
+    runBuild = true,
+    registryScope = "staytunedllp",
+    browsers = "chromium",
+  ): Promise<string> {
+    return runPlaywrightTests(source, {
+      nodeAuthToken,
+      packagePaths,
+      testSelector,
+      testScript,
+      runBuild,
+      registryScope,
+      browsers,
     });
   }
 
