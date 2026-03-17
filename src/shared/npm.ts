@@ -137,11 +137,13 @@ export function withFullSource(
 ): Container {
   const workspace = options.workspace ?? DEFAULT_WORKSPACE;
   const exclude = options.exclude ?? DEFAULT_SOURCE_EXCLUDES;
+  const strategy = options.strategy ?? "replace";
 
-  // We want to overlay the source code onto the container's workspace
-  // while preserving any existing state (node_modules, .npmrc, etc.).
-  // Dagger's withDirectory replaces the target path entirely.
-  // To achieve "overlay" semantics, we copy to a temp path and then merge.
+  if (strategy === "replace") {
+    return container.withDirectory(workspace, source, { exclude });
+  }
+
+  // Overlay strategy (merges source into workspace without deleting existing files)
   const tempPath = "/tmp/dagger-source-overlay";
 
   return container

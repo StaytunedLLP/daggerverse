@@ -48,5 +48,5 @@ export function withPlaywrightCache(
     container,
     DEFAULT_PLAYWRIGHT_CACHE_PATH,
     options.cacheVolume ?? DEFAULT_PLAYWRIGHT_CACHE,
-  );
+  ).withEnvVariable("PLAYWRIGHT_BROWSERS_PATH", DEFAULT_PLAYWRIGHT_CACHE_PATH);
 }
