@@ -47,7 +47,7 @@ export async function runPlaywrightTests(
     browsers,
   });
 
-  container = withFullSource(container, source);
+  container = withFullSource(container, source, { strategy: "overlay" });
 
   if (options.runBuild ?? true) {
     container = runNpmScript(container, "build", {

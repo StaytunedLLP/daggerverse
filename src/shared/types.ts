@@ -28,6 +28,7 @@ export type InstallOptions = {
 export type SourceOptions = {
   workspace?: string;
   exclude?: string[];
+  strategy?: "replace" | "overlay";
 };
 
 export type PlaywrightOptions = {

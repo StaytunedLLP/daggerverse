@@ -15,17 +15,26 @@ import type {
 } from "./types.js";
 
 function manifestIncludePatterns(packagePaths: PathInput | undefined): string[] {
-  return normalizePaths(packagePaths).flatMap((packagePath) => {
-    if (packagePath === ".") {
-      return [".npmrc", "package-lock.json", "package.json"];
-    }
+  const paths = normalizePaths(packagePaths);
+  const patterns: string[] = [];
 
-    return [
-      `${packagePath}/.npmrc`,
-      `${packagePath}/package-lock.json`,
-      `${packagePath}/package.json`,
-    ];
-  });
+  for (const path of paths) {
+    if (path === ".") {
+      // For root installs, include all manifests in the tree to support monorepo linking
+      patterns.push("**/.npmrc", "**/package-lock.json", "**/package.json");
+    } else {
+      patterns.push(
+        `${path}/.npmrc`,
+        `${path}/package-lock.json`,
+        `${path}/package.json`,
+      );
+    }
+  }
+
+  // Ensure root manifests are always included as they are required for npm ci in monorepos
+  patterns.push(".npmrc", "package-lock.json", "package.json");
+
+  return [...new Set(patterns)];
 }
 
 function buildManifestDirectory(
@@ -126,7 +135,26 @@ export function withFullSource(
   source: Directory,
   options: SourceOptions = {},
 ): Container {
-  return container.withDirectory(options.workspace ?? DEFAULT_WORKSPACE, source, {
-    exclude: options.exclude ?? DEFAULT_SOURCE_EXCLUDES,
-  });
+  const workspace = options.workspace ?? DEFAULT_WORKSPACE;
+  const exclude = options.exclude ?? DEFAULT_SOURCE_EXCLUDES;
+  const strategy = options.strategy ?? "replace";
+
+  if (strategy === "replace") {
+    return container.withDirectory(workspace, source, { exclude });
+  }
+
+  // Overlay strategy (merges source into workspace without deleting existing files)
+  const tempPath = "/tmp/dagger-source-overlay";
+
+  return container
+    .withDirectory(tempPath, source, { exclude })
+    .withExec([
+      "bash",
+      "-lc",
+      [
+        STRICT_SHELL_HEADER,
+        `tar -C ${tempPath} -cf - . | tar -C ${shellQuote(workspace)} -xf -`,
+        `rm -rf ${tempPath}`,
+      ].join("\n"),
+    ]);
 }
