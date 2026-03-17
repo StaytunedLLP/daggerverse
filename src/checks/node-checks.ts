@@ -47,6 +47,7 @@ export async function runNodeChecks(
 
   let workspace = withFullSource(installed, source, {
     exclude: DEFAULT_SOURCE_EXCLUDES,
+    packagePaths,
   });
 
   for (const packagePath of packagePaths) {

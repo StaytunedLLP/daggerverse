@@ -126,7 +126,29 @@ export function withFullSource(
   source: Directory,
   options: SourceOptions = {},
 ): Container {
-  return container.withDirectory(options.workspace ?? DEFAULT_WORKSPACE, source, {
-    exclude: options.exclude ?? DEFAULT_SOURCE_EXCLUDES,
+  const workspace = options.workspace ?? DEFAULT_WORKSPACE;
+  const packagePaths = normalizePaths(options.packagePaths);
+  const exclude = options.exclude ?? DEFAULT_SOURCE_EXCLUDES;
+
+  // Capture existing node_modules from the container to preserve them
+  const modulesToRestore: Array<{ path: string; dir: Directory }> = [];
+  for (const p of packagePaths) {
+    const nodeModulesPath = resolveWorkspacePath(workspace, `${p}/node_modules`);
+    modulesToRestore.push({
+      path: nodeModulesPath,
+      dir: container.directory(nodeModulesPath),
+    });
+  }
+
+  // Overlay the source (this replaces the workspace and wipes node_modules)
+  let result = container.withDirectory(workspace, source, {
+    exclude,
   });
+
+  // Restore the node_modules
+  for (const { path, dir } of modulesToRestore) {
+    result = result.withDirectory(path, dir);
+  }
+
+  return result;
 }
