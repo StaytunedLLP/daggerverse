@@ -1,0 +1,6 @@
+{
+  "name": "gitDiffFiles",
+  "engineVersion": "v0.15.3",
+  "sdk": "typescript",
+  "source": "."
+}

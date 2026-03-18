@@ -1,0 +1,6 @@
+{
+    "name": "denoDeploy",
+    "sdk": "typescript",
+    "source": ".",
+    "engineVersion": "v0.15.3"
+}

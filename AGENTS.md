@@ -112,36 +112,38 @@ Primary code locations:
 
 ## Local Development Commands
 
+## Setup & Build
+
 - Install dependencies: `npm install`
-- Build TypeScript output: `npm run build`
-- Clean output: `npm run clean`
+- Build the project: `npm run build`
+- Clean build artifacts: `npm run clean`
 
-Minimum local validation for edits in this repo: `npm run build`.
+## Project Structure
 
-## Additional Engineering Rules
+- `src/staydevops-ts.ts`: Main entry point for the Dagger module.
+- `src/checks/`: Implementation of repository checks (format, lint, build, test).
+- `src/firebase/`: Firebase deployment logic.
+- `src/copilot/`: Node workspace preparation helpers.
+- `src/shared/`: Shared utilities and constants.
 
-- The section **Priority: Dagger Module Guidelines (Complete)** is the authoritative source for module authoring and workflow behavior.
-- Do not introduce parallel or conflicting rules in other docs; extend that priority section instead.
+## Development Guidelines
 
-## Validation Expectations
+- This is a Dagger module written in TypeScript.
+- **Decorator Safety**: Do NOT use imported constants inside decorators (e.g., `@argument({ ignore: CONSTANT })`). Inline the values to prevent Dagger Engine introspection crashes.
+- **Visibility**: Use both `@check()` and `@func()` decorators for validation methods to ensure they appear in both `dagger check -l` and `dagger functions`.
+- **Command Consistency**: Examples with custom arguments (like `--source`) must use `dagger call`. Use `dagger check` only for general, argument-free validation runs.
+- **TSDoc**: Use TSDoc for all public-facing module members to ensure they are documented in Daggerverse.
+- **Exports**: When adding new functionality, export it from `src/index.ts`.
 
-- Local code-level verification: `npm run build`
-- Module behavior verification: run representative `dagger call` functions from a sample/target repository
+## Testing
 
-## Agent Behavior Contract
+- Local verification: Run `npm run build` to ensure TypeScript compilation passes.
+- Module verification: Use `dagger call` from a sample repository to test the module functions.
 
-When acting as an AI coding/devops agent in this repository:
+## References & Documentation
 
-- Prefer minimal, targeted changes over broad refactors.
-- Preserve existing public APIs unless change is requested.
-- Keep docs/examples consistent with real module signatures.
-- Validate changes with at least `npm run build` whenever code is modified.
-- Favor secure secret handling (`env:`/Dagger `Secret`), never hardcode credentials.
-
-## Reference Docs
-
-- [Dagger Glossary](https://docs.dagger.io/reference/glossary)
-- [Dagger Core Concepts](https://docs.dagger.io/core-concepts)
-- [Dagger Features](https://docs.dagger.io/features)
-- [Extending Dagger](https://docs.dagger.io/extending)
-- [Dagger Type Reference](https://docs.dagger.io/getting-started/types)
+- [Dagger Glossary](https://docs.dagger.io/reference/glossary): Definitions of key terminology.
+- [Core Concepts](https://docs.dagger.io/core-concepts): Understanding the Dagger Engine and architecture.
+- [Dagger Features](https://docs.dagger.io/features): Overview of what Dagger can do.
+- [Extending Dagger](https://docs.dagger.io/extending): How to build and share Dagger modules.
+- [Dagger API Reference](https://docs.dagger.io/getting-started/types): Comprehensive reference for all Dagger types, functions, and modules.
