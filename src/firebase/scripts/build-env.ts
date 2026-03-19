@@ -43,7 +43,9 @@ function toDotenvLines(raw: string): string {
   }
 }
 
-const envFileContent = toDotenvLines(content);
-if (envFileContent.trim().length > 0) {
-  writeFileSync(".env", envFileContent);
+if (process.env.STAYDEVOPS_RUNTIME === "true") {
+  const envFileContent = toDotenvLines(content);
+  if (envFileContent.trim().length > 0) {
+    writeFileSync(".env", envFileContent);
+  }
 }

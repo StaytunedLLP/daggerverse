@@ -215,6 +215,7 @@ function withBuildEnv(container: Container, buildEnv?: Secret): Container {
 
   return container
     .withSecretVariable("BUILD_ENV_SECRET", buildEnv)
+    .withEnvVariable("STAYDEVOPS_RUNTIME", "true")
     .withWorkdir(FIREBASE_WORKDIR)
     .withExec(["node", APPHOSTING_BUILD_ENV_RUNTIME_PATH]);
 }
@@ -230,6 +231,7 @@ function withApphostingBuildPreparation(
     .withEnvVariable("APPHOSTING_ROOT_DIR", rootDir)
     .withEnvVariable("APPHOSTING_FIREBASE_DIR", firebaseDir?.trim() || ".")
     .withEnvVariable("APPHOSTING_CONFIG_NAME", FIREBASE_APPHOSTING_CONFIG_NAME)
+    .withEnvVariable("STAYDEVOPS_RUNTIME", "true")
     .withWorkdir(FIREBASE_WORKDIR)
     .withExec(["node", APPHOSTING_VALIDATE_RUNTIME_PATH])
     .withExec([APPHOSTING_BUILD_RUNTIME_PATH])
@@ -267,14 +269,9 @@ function withResolvedApphostingAction(
       options.deletePreviewBackend ? "true" : "false",
     )
     .withEnvVariable("APPHOSTING_APP_ID", options.appId?.trim() || "")
-    .withEnvVariable(
-      "APPHOSTING_REGION",
-      options.region?.trim() || "asia-southeast1",
-    )
-    .withEnvVariable(
-      "APPHOSTING_CONFIG_PATH",
-      `${deployDir}/${FIREBASE_APPHOSTING_CONFIG_NAME}`,
-    )
+    .withEnvVariable("APPHOSTING_REGION", options.region?.trim() || "asia-southeast1")
+    .withEnvVariable("APPHOSTING_CONFIG_PATH", `${deployDir}/${FIREBASE_APPHOSTING_CONFIG_NAME}`)
+    .withEnvVariable("STAYDEVOPS_RUNTIME", "true")
     .withWorkdir(deployDir)
     .withExec([
       "node",
