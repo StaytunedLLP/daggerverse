@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -46,6 +47,10 @@ function firebase(args: string[]): string {
   return runFirebase(args).stdout;
 }
 
+function withProjectArgs(projectId: string): string[] {
+  return projectId ? ["--project", projectId] : [];
+}
+
 function isBackendMissingMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
@@ -60,8 +65,7 @@ function getBackend(projectId: string, backendId: string) {
     const raw = firebase([
       "apphosting:backends:get",
       backendId,
-      "--project",
-      projectId,
+      ...withProjectArgs(projectId),
       "--json",
     ]);
     return {
@@ -79,6 +83,22 @@ function getBackend(projectId: string, backendId: string) {
     throw new Error(
       `Unable to query App Hosting backend '${backendId}' in project '${projectId}'.\n${message}`,
     );
+  }
+}
+
+function resolveBackendFromConfig(configPath: string): string {
+  if (!configPath) {
+    return "";
+  }
+
+  try {
+    const raw = readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw) as {
+      apphosting?: Array<{ backendId?: string }>;
+    };
+    return parsed.apphosting?.[0]?.backendId?.trim() ?? "";
+  } catch {
+    return "";
   }
 }
 
@@ -136,28 +156,31 @@ const backendId =
 const configPath =
   readCliArg("config-path") ?? process.env.APPHOSTING_CONFIG_PATH?.trim() ?? "";
 const skipDeploy =
-  readCliBoolean("skip-deploy") ?? process.env.APPHOSTING_SKIP_DEPLOY === "true";
+  readCliBoolean("skip-deploy") ??
+  process.env.APPHOSTING_SKIP_DEPLOY === "true";
 const allowMissing =
-  readCliBoolean("allow-missing") ?? process.env.APPHOSTING_ALLOW_MISSING === "true";
+  readCliBoolean("allow-missing") ??
+  process.env.APPHOSTING_ALLOW_MISSING === "true";
 const createBackend =
-  readCliBoolean("create-backend") ?? process.env.APPHOSTING_CREATE_BACKEND === "true";
+  readCliBoolean("create-backend") ??
+  process.env.APPHOSTING_CREATE_BACKEND === "true";
 const deletePreviewBackend =
   readCliBoolean("delete-preview-backend") ??
   process.env.APPHOSTING_DELETE_PREVIEW_BACKEND === "true";
-const appId = readCliArg("app-id") ?? process.env.APPHOSTING_APP_ID?.trim() ?? "";
+const appId =
+  readCliArg("app-id") ?? process.env.APPHOSTING_APP_ID?.trim() ?? "";
 const region =
-  readCliArg("region") ?? (process.env.APPHOSTING_REGION?.trim() || "asia-southeast1");
+  readCliArg("region") ??
+  (process.env.APPHOSTING_REGION?.trim() || "asia-southeast1");
 
 try {
-  if (!projectId) {
-    throw new Error("projectId is required");
-  }
+  const resolvedBackendId = backendId || resolveBackendFromConfig(configPath);
 
-  if (!backendId) {
+  if (!resolvedBackendId) {
     throw new Error("backendId is required");
   }
 
-  const initial = getBackend(projectId, backendId);
+  const initial = getBackend(projectId, resolvedBackendId);
   let action = "skipped";
   let message = "";
   let serviceUrl = initial.exists ? getBackendUrl(initial.payload) : null;
@@ -166,19 +189,18 @@ try {
     if (initial.exists) {
       firebase([
         "apphosting:backends:delete",
-        backendId,
-        "--project",
-        projectId,
+        resolvedBackendId,
+        ...withProjectArgs(projectId),
         "--force",
       ]);
       action = "deleted";
-      message = `Deleted App Hosting backend ${backendId}.`;
+      message = `Deleted App Hosting backend ${resolvedBackendId}.`;
       serviceUrl = null;
     } else {
-      message = `Backend ${backendId} does not exist; nothing to delete.`;
+      message = `Backend ${resolvedBackendId} does not exist; nothing to delete.`;
     }
   } else if (skipDeploy) {
-    message = `Skipped deploy for App Hosting backend ${backendId}.`;
+    message = `Skipped deploy for App Hosting backend ${resolvedBackendId}.`;
   } else {
     if (!initial.exists && createBackend) {
       if (!appId) {
@@ -190,9 +212,8 @@ try {
       firebase([
         "apphosting:backends:create",
         "--backend",
-        backendId,
-        "--project",
-        projectId,
+        resolvedBackendId,
+        ...withProjectArgs(projectId),
         "--primary-region",
         region,
         "--app",
@@ -202,7 +223,7 @@ try {
 
     if (!initial.exists && !allowMissing && !createBackend) {
       throw new Error(
-        `Backend ${backendId} not found in project ${projectId}. Create it first or enable backend creation.`,
+        `Backend ${resolvedBackendId} not found${projectId ? ` in project ${projectId}` : ""}. Create it first or enable backend creation.`,
       );
     }
 
@@ -213,28 +234,27 @@ try {
     firebase([
       "deploy",
       "--only",
-      `apphosting:${backendId}`,
+      `apphosting:${resolvedBackendId}`,
       "--config",
       configPath,
-      "--project",
-      projectId,
+      ...withProjectArgs(projectId),
       "--non-interactive",
       "--force",
     ]);
 
-    const resolved = getBackend(projectId, backendId);
+    const resolved = getBackend(projectId, resolvedBackendId);
     serviceUrl = resolved.exists ? getBackendUrl(resolved.payload) : null;
     action = "deployed";
     message =
       initial.exists ?
-        `Deployed App Hosting backend ${backendId}.`
-      : `Created and deployed App Hosting backend ${backendId}.`;
+        `Deployed App Hosting backend ${resolvedBackendId}.`
+      : `Created and deployed App Hosting backend ${resolvedBackendId}.`;
   }
 
   process.stdout.write(
     JSON.stringify({
       action,
-      backendId,
+      backendId: resolvedBackendId,
       projectId,
       serviceUrl,
       backendExisted: initial.exists,
@@ -253,6 +273,12 @@ try {
       serviceUrl: null,
       backendExisted: null,
       message,
+      debug: {
+        argv: process.argv,
+        envProjectId: process.env.APPHOSTING_PROJECT_ID ?? null,
+        envBackendId: process.env.APPHOSTING_BACKEND_ID ?? null,
+        envConfigPath: process.env.APPHOSTING_CONFIG_PATH ?? null,
+      },
     }),
   );
 }
