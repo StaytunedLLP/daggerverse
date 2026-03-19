@@ -1,5 +1,10 @@
 import { execFileSync } from "node:child_process";
 
+declare const process: {
+  env: Record<string, string | undefined>;
+  stdout: { write: (value: string) => void };
+};
+
 type FirebaseResult = {
   stdout: string;
   stderr: string;
@@ -113,93 +118,108 @@ const deletePreviewBackend =
 const appId = process.env.APPHOSTING_APP_ID?.trim() ?? "";
 const region = process.env.APPHOSTING_REGION?.trim() || "asia-southeast1";
 
-if (!projectId) {
-  throw new Error("projectId is required");
-}
-
-if (!backendId) {
-  throw new Error("backendId is required");
-}
-
-const initial = getBackend(projectId, backendId);
-let action = "skipped";
-let message = "";
-let serviceUrl = initial.exists ? getBackendUrl(initial.payload) : null;
-
-if (deletePreviewBackend) {
-  if (initial.exists) {
-    firebase([
-      "apphosting:backends:delete",
-      backendId,
-      "--project",
-      projectId,
-      "--force",
-    ]);
-    action = "deleted";
-    message = `Deleted App Hosting backend ${backendId}.`;
-    serviceUrl = null;
-  } else {
-    message = `Backend ${backendId} does not exist; nothing to delete.`;
+try {
+  if (!projectId) {
+    throw new Error("projectId is required");
   }
-} else if (skipDeploy) {
-  message = `Skipped deploy for App Hosting backend ${backendId}.`;
-} else {
-  if (!initial.exists && createBackend) {
-    if (!appId) {
-      throw new Error("appId is required when createPreviewBackend is enabled");
+
+  if (!backendId) {
+    throw new Error("backendId is required");
+  }
+
+  const initial = getBackend(projectId, backendId);
+  let action = "skipped";
+  let message = "";
+  let serviceUrl = initial.exists ? getBackendUrl(initial.payload) : null;
+
+  if (deletePreviewBackend) {
+    if (initial.exists) {
+      firebase([
+        "apphosting:backends:delete",
+        backendId,
+        "--project",
+        projectId,
+        "--force",
+      ]);
+      action = "deleted";
+      message = `Deleted App Hosting backend ${backendId}.`;
+      serviceUrl = null;
+    } else {
+      message = `Backend ${backendId} does not exist; nothing to delete.`;
+    }
+  } else if (skipDeploy) {
+    message = `Skipped deploy for App Hosting backend ${backendId}.`;
+  } else {
+    if (!initial.exists && createBackend) {
+      if (!appId) {
+        throw new Error("appId is required when createPreviewBackend is enabled");
+      }
+
+      firebase([
+        "apphosting:backends:create",
+        "--backend",
+        backendId,
+        "--project",
+        projectId,
+        "--primary-region",
+        region,
+        "--app",
+        appId,
+      ]);
+    }
+
+    if (!initial.exists && !allowMissing && !createBackend) {
+      throw new Error(
+        `Backend ${backendId} not found in project ${projectId}. Create it first or enable backend creation.`,
+      );
+    }
+
+    if (!configPath) {
+      throw new Error("APPHOSTING_CONFIG_PATH is required");
     }
 
     firebase([
-      "apphosting:backends:create",
-      "--backend",
-      backendId,
+      "deploy",
+      "--only",
+      `apphosting:${backendId}`,
+      "--config",
+      configPath,
       "--project",
       projectId,
-      "--primary-region",
-      region,
-      "--app",
-      appId,
+      "--non-interactive",
+      "--force",
     ]);
+
+    const resolved = getBackend(projectId, backendId);
+    serviceUrl = resolved.exists ? getBackendUrl(resolved.payload) : null;
+    action = "deployed";
+    message =
+      initial.exists ?
+        `Deployed App Hosting backend ${backendId}.`
+      : `Created and deployed App Hosting backend ${backendId}.`;
   }
 
-  if (!initial.exists && !allowMissing && !createBackend) {
-    throw new Error(
-      `Backend ${backendId} not found in project ${projectId}. Create it first or enable backend creation.`,
-    );
-  }
+  process.stdout.write(
+    JSON.stringify({
+      action,
+      backendId,
+      projectId,
+      serviceUrl,
+      backendExisted: initial.exists,
+      message,
+    }),
+  );
+} catch (error: any) {
+  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
 
-  if (!configPath) {
-    throw new Error("APPHOSTING_CONFIG_PATH is required");
-  }
-
-  firebase([
-    "deploy",
-    "--only",
-    `apphosting:${backendId}`,
-    "--config",
-    configPath,
-    "--project",
-    projectId,
-    "--non-interactive",
-    "--force",
-  ]);
-
-  const resolved = getBackend(projectId, backendId);
-  serviceUrl = resolved.exists ? getBackendUrl(resolved.payload) : null;
-  action = "deployed";
-  message =
-    initial.exists ?
-      `Deployed App Hosting backend ${backendId}.`
-    : `Created and deployed App Hosting backend ${backendId}.`;
+  process.stdout.write(
+    JSON.stringify({
+      action: "failed",
+      backendId,
+      projectId,
+      serviceUrl: null,
+      backendExisted: null,
+      message,
+    }),
+  );
 }
-
-process.stdout.write(
-  JSON.stringify({
-    action,
-    backendId,
-    projectId,
-    serviceUrl,
-    backendExisted: initial.exists,
-    message,
-  }),
-);
