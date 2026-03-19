@@ -360,7 +360,7 @@ export class StaydevopsTs {
     region?: string,
     wifAudience?: string,
   ): Promise<string> {
-    const result = await firebaseDeployApphostingPipeline(
+    return firebaseDeployApphostingPipeline(
       source,
       projectId,
       backendId,
@@ -383,22 +383,6 @@ export class StaydevopsTs {
         wifAudience,
       },
     );
-
-    let payload: { action?: string; message?: string } | null = null;
-    try {
-      payload = JSON.parse(result) as {
-        action?: string;
-        message?: string;
-      };
-    } catch {
-      payload = null;
-    }
-
-    if (payload?.action === "failed") {
-      throw new Error(payload.message || "App Hosting deploy failed");
-    }
-
-    return result;
   }
 
   /**

@@ -152,7 +152,9 @@ try {
   } else {
     if (!initial.exists && createBackend) {
       if (!appId) {
-        throw new Error("appId is required when createPreviewBackend is enabled");
+        throw new Error(
+          "appId is required when createPreviewBackend is enabled",
+        );
       }
 
       firebase([
@@ -210,7 +212,8 @@ try {
     }),
   );
 } catch (error: any) {
-  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
+  const message =
+    error instanceof Error ? error.message : String(error ?? "Unknown error");
 
   process.stdout.write(
     JSON.stringify({
