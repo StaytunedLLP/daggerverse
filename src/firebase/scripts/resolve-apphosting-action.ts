@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 
 declare const process: {
   env: Record<string, string | undefined>;
+  argv: string[];
   stdout: { write: (value: string) => void };
 };
 
@@ -107,16 +108,45 @@ function getBackendUrl(
   return null;
 }
 
-const projectId = process.env.APPHOSTING_PROJECT_ID?.trim() ?? "";
-const backendId = process.env.APPHOSTING_BACKEND_ID?.trim() ?? "";
-const configPath = process.env.APPHOSTING_CONFIG_PATH?.trim() ?? "";
-const skipDeploy = process.env.APPHOSTING_SKIP_DEPLOY === "true";
-const allowMissing = process.env.APPHOSTING_ALLOW_MISSING === "true";
-const createBackend = process.env.APPHOSTING_CREATE_BACKEND === "true";
+function readCliArg(name: string): string | undefined {
+  const target = `--${name}`;
+  const index = process.argv.indexOf(target);
+
+  if (index < 0) {
+    return undefined;
+  }
+
+  const value = process.argv[index + 1];
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
+function readCliBoolean(name: string): boolean | undefined {
+  const raw = readCliArg(name);
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+
+  return raw.toLowerCase() === "true";
+}
+
+const projectId =
+  readCliArg("project-id") ?? process.env.APPHOSTING_PROJECT_ID?.trim() ?? "";
+const backendId =
+  readCliArg("backend-id") ?? process.env.APPHOSTING_BACKEND_ID?.trim() ?? "";
+const configPath =
+  readCliArg("config-path") ?? process.env.APPHOSTING_CONFIG_PATH?.trim() ?? "";
+const skipDeploy =
+  readCliBoolean("skip-deploy") ?? process.env.APPHOSTING_SKIP_DEPLOY === "true";
+const allowMissing =
+  readCliBoolean("allow-missing") ?? process.env.APPHOSTING_ALLOW_MISSING === "true";
+const createBackend =
+  readCliBoolean("create-backend") ?? process.env.APPHOSTING_CREATE_BACKEND === "true";
 const deletePreviewBackend =
+  readCliBoolean("delete-preview-backend") ??
   process.env.APPHOSTING_DELETE_PREVIEW_BACKEND === "true";
-const appId = process.env.APPHOSTING_APP_ID?.trim() ?? "";
-const region = process.env.APPHOSTING_REGION?.trim() || "asia-southeast1";
+const appId = readCliArg("app-id") ?? process.env.APPHOSTING_APP_ID?.trim() ?? "";
+const region =
+  readCliArg("region") ?? (process.env.APPHOSTING_REGION?.trim() || "asia-southeast1");
 
 try {
   if (!projectId) {

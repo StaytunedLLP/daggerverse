@@ -266,7 +266,28 @@ function withResolvedApphostingAction(
       `${deployDir}/${FIREBASE_APPHOSTING_CONFIG_NAME}`,
     )
     .withWorkdir(deployDir)
-    .withExec(["node", APPHOSTING_ACTION_RUNTIME_PATH]);
+    .withExec([
+      "node",
+      APPHOSTING_ACTION_RUNTIME_PATH,
+      "--project-id",
+      projectId,
+      "--backend-id",
+      backendId,
+      "--config-path",
+      `${deployDir}/${FIREBASE_APPHOSTING_CONFIG_NAME}`,
+      "--skip-deploy",
+      options.skipDeploy ? "true" : "false",
+      "--allow-missing",
+      options.allowMissingBackend ? "true" : "false",
+      "--create-backend",
+      options.createPreviewBackend ? "true" : "false",
+      "--delete-preview-backend",
+      options.deletePreviewBackend ? "true" : "false",
+      "--app-id",
+      options.appId?.trim() || "",
+      "--region",
+      options.region?.trim() || "asia-southeast1",
+    ]);
 }
 
 export async function firebaseDeployApphostingPipeline(
