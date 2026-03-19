@@ -5,6 +5,7 @@ declare const process: {
   env: Record<string, string | undefined>;
   argv: string[];
   stdout: { write: (value: string) => void };
+  stderr: { write: (value: string) => void };
 };
 
 type FirebaseResult = {
@@ -265,6 +266,8 @@ if (process.env.STAYDEVOPS_RUNTIME === "true") {
   } catch (error: any) {
     const message =
       error instanceof Error ? error.message : String(error ?? "Unknown error");
+
+    process.stderr.write(`\n--- DEPLOYMENT ACTION FAILED ---\n${message}\n`);
 
     process.stdout.write(
       JSON.stringify({
