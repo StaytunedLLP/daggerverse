@@ -1,14 +1,52 @@
 import { execFileSync } from "node:child_process";
 
-function firebase(args: string[], stdio: "inherit" | ["ignore", "pipe", "pipe"] = [
-  "ignore",
-  "pipe",
-  "pipe",
-]): string {
-  return execFileSync("firebase", args, {
-    encoding: "utf8",
-    stdio,
-  });
+type FirebaseResult = {
+  stdout: string;
+  stderr: string;
+};
+
+function runFirebase(args: string[]): FirebaseResult {
+  const command = `firebase ${args.join(" ")}`;
+
+  try {
+    const stdout = execFileSync("firebase", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    return {
+      stdout,
+      stderr: "",
+    };
+  } catch (error: any) {
+    const stdout = typeof error?.stdout === "string" ? error.stdout : "";
+    const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+    const status =
+      typeof error?.status === "number" ? ` (exit ${error.status})` : "";
+
+    throw new Error(
+      [
+        `Firebase CLI command failed${status}: ${command}`,
+        stdout ? `stdout:\n${stdout.trim()}` : "",
+        stderr ? `stderr:\n${stderr.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
+  }
+}
+
+function firebase(args: string[]): string {
+  return runFirebase(args).stdout;
+}
+
+function isBackendMissingMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("not found") ||
+    normalized.includes("404") ||
+    (normalized.includes("resource") && normalized.includes("does not exist"))
+  );
 }
 
 function getBackend(projectId: string, backendId: string) {
@@ -20,13 +58,27 @@ function getBackend(projectId: string, backendId: string) {
       projectId,
       "--json",
     ]);
-    return { exists: true, payload: JSON.parse(raw) as Record<string, unknown> };
-  } catch (error) {
-    return { exists: false, error };
+    return {
+      exists: true,
+      payload: JSON.parse(raw) as Record<string, unknown>,
+    };
+  } catch (error: any) {
+    const message =
+      error instanceof Error ? error.message : String(error ?? "Unknown error");
+
+    if (isBackendMissingMessage(message)) {
+      return { exists: false, error };
+    }
+
+    throw new Error(
+      `Unable to query App Hosting backend '${backendId}' in project '${projectId}'.\n${message}`,
+    );
   }
 }
 
-function getBackendUrl(payload: Record<string, unknown> | undefined): string | null {
+function getBackendUrl(
+  payload: Record<string, unknown> | undefined,
+): string | null {
   if (!payload) {
     return null;
   }
@@ -76,10 +128,13 @@ let serviceUrl = initial.exists ? getBackendUrl(initial.payload) : null;
 
 if (deletePreviewBackend) {
   if (initial.exists) {
-    firebase(
-      ["apphosting:backends:delete", backendId, "--project", projectId, "--force"],
-      "inherit",
-    );
+    firebase([
+      "apphosting:backends:delete",
+      backendId,
+      "--project",
+      projectId,
+      "--force",
+    ]);
     action = "deleted";
     message = `Deleted App Hosting backend ${backendId}.`;
     serviceUrl = null;
@@ -94,20 +149,17 @@ if (deletePreviewBackend) {
       throw new Error("appId is required when createPreviewBackend is enabled");
     }
 
-    firebase(
-      [
-        "apphosting:backends:create",
-        "--backend",
-        backendId,
-        "--project",
-        projectId,
-        "--primary-region",
-        region,
-        "--app",
-        appId,
-      ],
-      "inherit",
-    );
+    firebase([
+      "apphosting:backends:create",
+      "--backend",
+      backendId,
+      "--project",
+      projectId,
+      "--primary-region",
+      region,
+      "--app",
+      appId,
+    ]);
   }
 
   if (!initial.exists && !allowMissing && !createBackend) {
@@ -120,26 +172,24 @@ if (deletePreviewBackend) {
     throw new Error("APPHOSTING_CONFIG_PATH is required");
   }
 
-  firebase(
-    [
-      "deploy",
-      "--only",
-      `apphosting:${backendId}`,
-      "--config",
-      configPath,
-      "--project",
-      projectId,
-      "--non-interactive",
-      "--force",
-    ],
-    "inherit",
-  );
+  firebase([
+    "deploy",
+    "--only",
+    `apphosting:${backendId}`,
+    "--config",
+    configPath,
+    "--project",
+    projectId,
+    "--non-interactive",
+    "--force",
+  ]);
 
   const resolved = getBackend(projectId, backendId);
   serviceUrl = resolved.exists ? getBackendUrl(resolved.payload) : null;
   action = "deployed";
-  message = initial.exists
-    ? `Deployed App Hosting backend ${backendId}.`
+  message =
+    initial.exists ?
+      `Deployed App Hosting backend ${backendId}.`
     : `Created and deployed App Hosting backend ${backendId}.`;
 }
 
