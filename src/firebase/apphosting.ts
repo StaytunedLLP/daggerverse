@@ -174,7 +174,9 @@ function withInstalledApphostingDependencies(
       FIREBASE_WORKDIR
     : `${FIREBASE_WORKDIR}/${installTarget.path}`;
 
-  return container.withWorkdir(installDir).withExec(["npm", "ci"]);
+  return container
+    .withWorkdir(installDir)
+    .withExec(["bash", "-c", "npm ci --verbose || (printf \"\\n--- NPM CI FAILED ---\\n\"; exit 1)"]);
 }
 
 function withApphostingScripts(container: Container): Container {
