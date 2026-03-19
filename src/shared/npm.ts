@@ -72,9 +72,10 @@ export function withNpmAuth(
       "-lc",
       [
         STRICT_SHELL_HEADER,
-        "cat > /tmp/staytuned.npmrc <<'EOF'",
+        "cat > /tmp/staytuned.npmrc <<EOF",
         `@${registryScope}:registry=https://npm.pkg.github.com`,
         "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+        "always-auth=true",
         "EOF",
         `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
         "  target=\"${path}\"",
