@@ -1,7 +1,7 @@
-export const DEFAULT_IMAGE = "node:24-bookworm";
+export const DEFAULT_IMAGE = "node:22-bookworm";
 export const DEFAULT_WORKSPACE = "/workspace";
-export const DEFAULT_NPM_CACHE = "npm-cache-node24";
-export const DEFAULT_PLAYWRIGHT_CACHE = "playwright-cache-node24";
+export const DEFAULT_NPM_CACHE = "npm-cache-node22";
+export const DEFAULT_PLAYWRIGHT_CACHE = "playwright-cache-node22";
 export const DEFAULT_NPM_CACHE_PATH = "/root/.npm";
 export const DEFAULT_PLAYWRIGHT_CACHE_PATH = "/root/.cache/ms-playwright";
 export const DEFAULT_REGISTRY_SCOPE = "staytunedllp";

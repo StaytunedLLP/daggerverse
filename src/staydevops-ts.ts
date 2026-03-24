@@ -14,6 +14,7 @@ import {
   gitDiffPrevious,
   gitDiffStaged,
 } from "./git/index.js";
+import { publishPackage } from "./publish/index.js";
 import { runPlaywrightTests } from "./playwright/index.js";
 import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
 
@@ -298,6 +299,44 @@ export class StaydevopsTs {
       webappConfig,
       extraEnv,
       nodeAuthToken,
+    });
+  }
+
+  /**
+   * Deterministic package publishing logic for npm packages.
+   *
+   * @param source - Repository source directory to publish from.
+   * @param ref - Git ref triggering the workflow (e.g. refs/heads/main, refs/tags/v1.2.3).
+   * @param eventName - GitHub event name (e.g. push, release, workflow_dispatch).
+   * @param githubToken - GitHub PAT for npm authentication and PR validation.
+   * @param repoOwner - Repository owner (e.g. StaytunedLLP).
+   * @param repoName - Repository name (e.g. devops).
+   * @param inputBranch - Manual branch input provided for workflow_dispatch.
+   * @param registryScope - The scope of the npm package (e.g. staytunedllp).
+   *
+   * @example
+   * dagger call publish-package --source . --ref "refs/heads/main" --event-name "push" --github-token env:GITHUB_TOKEN --repo-owner "StaytunedLLP" --repo-name "devops"
+   */
+  @func({ cache: "never" })
+  async publishPackage(
+    source: Directory,
+    ref: string,
+    eventName: string,
+    githubToken: Secret,
+    repoOwner: string,
+    repoName: string,
+    inputBranch?: string,
+    registryScope?: string,
+  ): Promise<string> {
+    return publishPackage({
+      source,
+      ref,
+      eventName,
+      inputBranch,
+      githubToken,
+      repoOwner,
+      repoName,
+      registryScope,
     });
   }
 }

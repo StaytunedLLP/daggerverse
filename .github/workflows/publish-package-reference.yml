@@ -1,0 +1,50 @@
+name: Publish Package (Reference)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'The branch to publish from (must have an open PR)'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: st-arc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bootstrap Dagger (ARC)
+        uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
+        with:
+          namespace: dagger
+          label_selector: name=dagger-engine
+          prefer_same_node: "true"
+
+      - name: Dagger Call (Publish Package)
+        uses: dagger/dagger-for-github@v8.3.0
+        with:
+          version: "0.20.1"
+          verb: call
+          module: github.com/StaytunedLLP/daggerverse
+          args: >
+            publish-package
+            --source=.
+            --ref="${{ github.ref }}"
+            --event-name="${{ github.event_name }}"
+            --github-token=env:NODE_AUTH_TOKEN
+            --repo-owner="${{ github.repository_owner }}"
+            --repo-name="${{ github.event.repository.name }}"
+            --input-branch="${{ github.event.inputs.branch }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
