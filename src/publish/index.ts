@@ -13,7 +13,13 @@ import {
   STRICT_SHELL_HEADER,
 } from "../shared/constants.js";
 import { shellQuote } from "../shared/path-utils.js";
-import { withNpmAuth } from "../shared/npm.js";
+import {
+  withFullSource,
+  withInstalledDependencies,
+  withLockfilesOnly,
+  withNpmAuth,
+} from "../shared/npm.js";
+import { withNpmCache } from "../shared/container.js";
 
 /**
  * Deterministic package publishing logic.
@@ -97,6 +103,12 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     .from(DEFAULT_IMAGE)
     .withWorkdir(DEFAULT_WORKSPACE);
 
+  // Apply Volume Cache
+  container = withNpmCache(container);
+
+  // Lockfile-first Layering
+  container = withLockfilesOnly(container, source);
+
   // Authentication
   container = withNpmAuth(container, githubToken, {
     registryScope,
@@ -104,31 +116,26 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     npmrcPaths: ".",
   });
 
-  // Source and Override Version
-  container = container
-    .withDirectory(DEFAULT_WORKSPACE, source, {
-      exclude: [".git", "node_modules", "dist"],
-    })
-    .withExec([
-      "bash",
-      "-c",
-      `${STRICT_SHELL_HEADER}
-      # Update package.json version locally only
-      node -e '
-        const fs = require("fs");
-        const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-        pkg.version = "${finalVersion}";
-        fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-      '
-      `,
-    ]);
+  // Install Dependencies (Layered Cache)
+  container = withInstalledDependencies(container, ".", {
+    npmCiArgs: ["--workspaces=false"],
+  });
 
-  // Install, Build, and Publish
+  // Add Full Source
+  container = withFullSource(container, source);
+
+  // Override Version and Publish
   container = container.withExec([
     "bash",
     "-c",
     `${STRICT_SHELL_HEADER}
-    npm ci --workspaces=false
+    # Update package.json version locally only
+    node -e '
+      const fs = require("fs");
+      const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+      pkg.version = "${finalVersion}";
+      fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+    '
     npm run build:publish
     npm publish --tag ${shellQuote(npmTag)}
     `,
