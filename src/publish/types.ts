@@ -24,6 +24,11 @@ export interface PublishOptions {
   inputBranch?: string;
 
   /**
+   * Release PR number to finalize after publishing a merged release commit.
+   */
+  releasePrNumber?: number;
+
+  /**
    * GitHub PAT for npm authentication and PR validation.
    */
   githubToken: Secret;

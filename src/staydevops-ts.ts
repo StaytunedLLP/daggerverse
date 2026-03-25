@@ -304,7 +304,7 @@ export class StaydevopsTs {
 
   /**
    * Deterministic package publishing logic for npm packages.
-   * For merged release PRs, this also creates the GitHub Release after publishing the npm package.
+    * For merged release PRs, this also creates the GitHub Release after publishing the npm package and can finalize release labels.
    *
    * @param source - Repository source directory to publish from.
    * @param ref - Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
@@ -313,6 +313,7 @@ export class StaydevopsTs {
    * @param repoOwner - Repository owner (e.g. StaytunedLLP).
    * @param repoName - Repository name (e.g. devops).
    * @param inputBranch - Manual branch input provided for workflow_dispatch.
+  * @param releasePrNumber - Release PR number to finalize after publishing a merged release commit.
    * @param registryScope - The scope of the npm package (e.g. staytunedllp).
    *
    * @example
@@ -327,6 +328,7 @@ export class StaydevopsTs {
     repoOwner: string,
     repoName: string,
     inputBranch?: string,
+    releasePrNumber?: number,
     registryScope?: string,
   ): Promise<string> {
     return publishPackage({
@@ -334,6 +336,7 @@ export class StaydevopsTs {
       ref,
       eventName,
       inputBranch,
+      releasePrNumber,
       githubToken,
       repoOwner,
       repoName,

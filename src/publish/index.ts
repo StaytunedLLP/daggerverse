@@ -30,6 +30,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     ref,
     eventName,
     inputBranch,
+    releasePrNumber,
     githubToken,
     repoOwner,
     repoName,
@@ -40,8 +41,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   if (eventName === "pull_request") {
     context = "main";
   } else if (eventName === "workflow_dispatch") {
-    context = "pr";
-    if (!inputBranch) {
+    context = releasePrNumber !== undefined ? "main" : "pr";
+    if (context === "pr" && !inputBranch) {
       throw new Error(
         "Manual trigger (workflow_dispatch) requires inputBranch.",
       );
@@ -150,13 +151,14 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
       const repo = process.env.REPO_NAME;
       const tagName = process.env.RELEASE_TAG;
       const targetCommitish = process.env.TARGET_SHA;
+      const releasePrNumber = process.env.RELEASE_PR_NUMBER;
       const token = process.env.GITHUB_TOKEN;
 
       if (!owner || !repo || !tagName || !targetCommitish || !token) {
         throw new Error("Missing GitHub release environment variables.");
       }
 
-      const response = await fetch(
+      const createResponse = await fetch(
         'https://api.github.com/repos/' + owner + '/' + repo + '/releases',
         {
           method: 'POST',
@@ -177,11 +179,55 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
         },
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text();
         throw new Error(
-          'Failed to create GitHub release (' + response.status + '): ' + errorText,
+          'Failed to create GitHub release (' + createResponse.status + '): ' + errorText,
         );
+      }
+
+      if (releasePrNumber) {
+        const pendingLabelPath = '/labels/autorelease%3A%20pending';
+
+        const pendingDelete = await fetch(
+          'https://api.github.com/repos/' + owner + '/' + repo + '/issues/' + releasePrNumber + pendingLabelPath,
+          {
+            method: 'DELETE',
+            headers: {
+              Authorization: 'Bearer ' + token,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          },
+        );
+
+        if (!pendingDelete.ok && pendingDelete.status !== 404) {
+          const errorText = await pendingDelete.text();
+          throw new Error(
+            'Failed to remove autorelease: pending label (' + pendingDelete.status + '): ' + errorText,
+          );
+        }
+
+        const taggedAdd = await fetch(
+          'https://api.github.com/repos/' + owner + '/' + repo + '/issues/' + releasePrNumber + '/labels',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + token,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+            body: JSON.stringify({ labels: ['autorelease: tagged'] }),
+          },
+        );
+
+        if (!taggedAdd.ok) {
+          const errorText = await taggedAdd.text();
+          throw new Error(
+            'Failed to add autorelease: tagged label (' + taggedAdd.status + '): ' + errorText,
+          );
+        }
       }
     `;
 
@@ -191,6 +237,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
       .withEnvVariable("REPO_NAME", repoName)
       .withEnvVariable("RELEASE_TAG", releaseTag)
       .withEnvVariable("TARGET_SHA", ref)
+      .withEnvVariable("RELEASE_PR_NUMBER", releasePrNumber?.toString() ?? "")
       .withExec([
         "bash",
         "-c",
