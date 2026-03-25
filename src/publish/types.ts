@@ -1,6 +1,6 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 
-export type PublishContextType = "release" | "main" | "pr";
+export type PublishContextType = "release" | "main" | "pr" | "pre-release";
 
 export interface PublishOptions {
   /**

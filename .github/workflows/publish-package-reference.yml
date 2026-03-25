@@ -5,15 +5,15 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       branch:
-        description: 'The branch to publish from (must have an open PR)'
+        description: "The branch to publish from (must have an open PR)"
         required: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Bootstrap Dagger (ARC)
         uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main

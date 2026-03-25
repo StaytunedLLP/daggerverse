@@ -38,13 +38,20 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   // 1. Resolve Context
   let context: PublishContextType;
   if (ref.startsWith("refs/tags/v")) {
-    context = "release";
+    const tagVersion = ref.replace("refs/tags/v", "");
+    if (tagVersion.includes("-")) {
+      context = "pre-release";
+    } else {
+      context = "release";
+    }
   } else if (ref === "refs/heads/main" || ref === "main") {
     context = "main";
   } else if (eventName === "workflow_dispatch") {
     context = "pr";
     if (!inputBranch) {
-      throw new Error("Manual trigger (workflow_dispatch) requires inputBranch.");
+      throw new Error(
+        "Manual trigger (workflow_dispatch) requires inputBranch.",
+      );
     }
   } else {
     throw new Error(`Unsupported trigger: ref=${ref}, event=${eventName}`);
@@ -77,6 +84,18 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     }
     finalVersion = baseVersion;
     npmTag = "latest";
+  } else if (context === "pre-release") {
+    const tagVersion = ref.replace("refs/tags/v", "");
+    if (!tagVersion.startsWith(`${baseVersion}-`)) {
+      throw new Error(
+        `Pre-release tag "${tagVersion}" must be a suffix of base version "${baseVersion}".`,
+      );
+    }
+    finalVersion = tagVersion;
+
+    // Extract npm tag from the pre-release suffix (e.g., 1.0.2-rc.1 -> rc)
+    const preReleasePart = tagVersion.split("-")[1];
+    npmTag = preReleasePart.split(".")[0];
   } else if (context === "main") {
     finalVersion = `${baseVersion}-pre`;
     npmTag = "next";
@@ -88,7 +107,11 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   }
 
   // 6. Registry Conflict Check
-  const exists = await checkRegistryVersion(packageName, finalVersion, githubToken);
+  const exists = await checkRegistryVersion(
+    packageName,
+    finalVersion,
+    githubToken,
+  );
   if (exists) {
     throw new Error(
       `Version "${finalVersion}" of package "${packageName}" already exists in registry.`,
@@ -96,7 +119,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   }
 
   // 7. Prepare Container and Publish
-  const registryScope = options.registryScope || extractScope(packageName) || "staytunedllp";
+  const registryScope =
+    options.registryScope || extractScope(packageName) || "staytunedllp";
 
   let container = dag
     .container()
@@ -115,6 +139,9 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
   });
+
+  // Add GitHub token for release API operations
+  container = container.withSecretVariable("GH_TOKEN", githubToken);
 
   // Install Dependencies (Layered Cache)
   container = withInstalledDependencies(container, ".", {
@@ -140,6 +167,40 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     npm publish --tag ${shellQuote(npmTag)}
     `,
   ]);
+
+  // Create GitHub prerelease for main/pre-release lines
+  if (context === "main" || context === "pre-release") {
+    const githubTag = `v${finalVersion}`;
+
+    container = container.withExec([
+      "bash",
+      "-c",
+      `${STRICT_SHELL_HEADER}
+      # Ensure curl is available for GitHub API
+      if ! command -v curl >/dev/null; then
+        apt-get update -y && apt-get install -y curl
+      fi
+
+      echo "Checking existing release ${githubTag}"
+      status=$(curl -s -o /tmp/release-status -w "%{http_code}" \
+        -H "Authorization: token \${GH_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${repoOwner}/${repoName}/releases/tags/${githubTag}")
+
+      if [ "$status" -eq 404 ]; then
+        echo "Creating prerelease ${githubTag}"
+        curl -s -X POST \
+          -H "Authorization: token \${GH_TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${repoOwner}/${repoName}/releases" \
+          -d '{"tag_name":"${githubTag}","name":"${githubTag}","body":"Automated pre-release for ${finalVersion}","prerelease":true}' \
+          > /tmp/release-create.json
+        cat /tmp/release-create.json
+      else
+        echo "Release ${githubTag} exists (HTTP \${status}), skipping create."
+      fi`,
+    ]);
+  }
 
   return container.stdout();
 }
