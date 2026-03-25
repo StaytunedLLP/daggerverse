@@ -37,13 +37,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
 
   // 1. Resolve Context
   let context: PublishContextType;
-  if (eventName === "release") {
-    if (!ref.startsWith("refs/tags/v")) {
-      throw new Error(
-        `Release event must provide a v-prefixed tag ref. Received: ${ref}`,
-      );
-    }
-    context = "release";
+  if (eventName === "pull_request") {
+    context = "main";
   } else if (eventName === "workflow_dispatch") {
     context = "pr";
     if (!inputBranch) {
@@ -53,7 +48,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     }
   } else {
     throw new Error(
-      `Unsupported event \"${eventName}\". Allowed events: release, workflow_dispatch.`,
+      `Unsupported event \"${eventName}\". Allowed events: pull_request, workflow_dispatch.`,
     );
   }
 
@@ -65,8 +60,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   // 3. Validate Base Version
   validateBaseVersion(packageVersion);
 
-  // For PR-specific publish, use the version from the PR branch package.json.
-  // Production release relies on the release tag and package.json version match.
+  // For merged release-PR publish, use the version in package.json from the merged commit.
+  // For manual PR publish, use the version from the selected PR branch package.json.
   let baseVersion = packageVersion;
 
   // 4. Resolve PR Number if needed
@@ -79,13 +74,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   let finalVersion: string;
   let npmTag: string;
 
-  if (context === "release") {
-    const tagVersion = ref.replace("refs/tags/v", "");
-    if (tagVersion !== packageVersion) {
-      throw new Error(
-        `Tag version "${tagVersion}" does not match package.json version "${packageVersion}".`,
-      );
-    }
+  if (context === "main") {
     finalVersion = packageVersion;
     npmTag = "latest";
   } else if (context === "pr" && prNumber !== undefined) {
