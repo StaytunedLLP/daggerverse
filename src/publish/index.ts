@@ -91,7 +91,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     finalVersion,
     githubToken,
   );
-  if (exists) {
+  if (exists && context === "pr") {
     throw new Error(
       `Version "${finalVersion}" of package "${packageName}" already exists in registry.`,
     );
@@ -128,6 +128,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   // Add Full Source
   container = withFullSource(container, source);
 
+  const skipNpmPublish = exists && context === "main";
+
   // Override Version and Publish
   container = container.withExec([
     "bash",
@@ -141,7 +143,9 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
       fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
     '
     npm run build:publish
-    npm publish --tag ${shellQuote(npmTag)}
+    if [[ "${skipNpmPublish}" != "true" ]]; then
+      npm publish --tag ${shellQuote(npmTag)}
+    fi
     `,
   ]);
 
@@ -181,9 +185,11 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
 
       if (!createResponse.ok) {
         const errorText = await createResponse.text();
-        throw new Error(
-          'Failed to create GitHub release (' + createResponse.status + '): ' + errorText,
-        );
+        if (createResponse.status !== 422) {
+          throw new Error(
+            'Failed to create GitHub release (' + createResponse.status + '): ' + errorText,
+          );
+        }
       }
 
       if (releasePrNumber) {
