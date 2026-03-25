@@ -99,6 +99,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   // 7. Prepare Container and Publish
   const registryScope =
     options.registryScope || extractScope(packageName) || "staytunedllp";
+  const releaseTag = `v${finalVersion}`;
 
   let container = dag
     .container()
@@ -142,6 +143,64 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     npm publish --tag ${shellQuote(npmTag)}
     `,
   ]);
+
+  if (context === "main") {
+    const releaseScript = `
+      const owner = process.env.REPO_OWNER;
+      const repo = process.env.REPO_NAME;
+      const tagName = process.env.RELEASE_TAG;
+      const targetCommitish = process.env.TARGET_SHA;
+      const token = process.env.GITHUB_TOKEN;
+
+      if (!owner || !repo || !tagName || !targetCommitish || !token) {
+        throw new Error("Missing GitHub release environment variables.");
+      }
+
+      const response = await fetch(
+        'https://api.github.com/repos/' + owner + '/' + repo + '/releases',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + token,
+            Accept: 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          body: JSON.stringify({
+            tag_name: tagName,
+            target_commitish: targetCommitish,
+            name: tagName,
+            body: 'Automated release for ' + tagName,
+            prerelease: false,
+            generate_release_notes: false,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          'Failed to create GitHub release (' + response.status + '): ' + errorText,
+        );
+      }
+    `;
+
+    container = container
+      .withSecretVariable("GITHUB_TOKEN", githubToken)
+      .withEnvVariable("REPO_OWNER", repoOwner)
+      .withEnvVariable("REPO_NAME", repoName)
+      .withEnvVariable("RELEASE_TAG", releaseTag)
+      .withEnvVariable("TARGET_SHA", ref)
+      .withExec([
+        "bash",
+        "-c",
+        `${STRICT_SHELL_HEADER}
+        node --input-type=module <<'EOF'
+${releaseScript}
+EOF
+        `,
+      ]);
+  }
 
   return container.stdout();
 }

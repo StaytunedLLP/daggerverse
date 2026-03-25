@@ -304,6 +304,7 @@ export class StaydevopsTs {
 
   /**
    * Deterministic package publishing logic for npm packages.
+   * For merged release PRs, this also creates the GitHub Release after publishing the npm package.
    *
    * @param source - Repository source directory to publish from.
    * @param ref - Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
