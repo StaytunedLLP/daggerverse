@@ -37,15 +37,13 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
 
   // 1. Resolve Context
   let context: PublishContextType;
-  if (ref.startsWith("refs/tags/v")) {
-    const tagVersion = ref.replace("refs/tags/v", "");
-    if (tagVersion.includes("-")) {
-      context = "pre-release";
-    } else {
-      context = "release";
+  if (eventName === "release") {
+    if (!ref.startsWith("refs/tags/v")) {
+      throw new Error(
+        `Release event must provide a v-prefixed tag ref. Received: ${ref}`,
+      );
     }
-  } else if (ref === "refs/heads/main" || ref === "main") {
-    context = "main";
+    context = "release";
   } else if (eventName === "workflow_dispatch") {
     context = "pr";
     if (!inputBranch) {
@@ -54,16 +52,22 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
       );
     }
   } else {
-    throw new Error(`Unsupported trigger: ref=${ref}, event=${eventName}`);
+    throw new Error(
+      `Unsupported event \"${eventName}\". Allowed events: release, workflow_dispatch.`,
+    );
   }
 
   // 2. Read package.json
   const manifest = await readPackageJson(source);
-  const baseVersion = manifest.version;
+  const packageVersion = manifest.version;
   const packageName = manifest.name;
 
   // 3. Validate Base Version
-  validateBaseVersion(baseVersion);
+  validateBaseVersion(packageVersion);
+
+  // For PR-specific publish, use the version from the PR branch package.json.
+  // Production release relies on the release tag and package.json version match.
+  let baseVersion = packageVersion;
 
   // 4. Resolve PR Number if needed
   let prNumber: number | undefined;
@@ -77,28 +81,13 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
 
   if (context === "release") {
     const tagVersion = ref.replace("refs/tags/v", "");
-    if (tagVersion !== baseVersion) {
+    if (tagVersion !== packageVersion) {
       throw new Error(
-        `Tag version "${tagVersion}" does not match package.json version "${baseVersion}".`,
+        `Tag version "${tagVersion}" does not match package.json version "${packageVersion}".`,
       );
     }
-    finalVersion = baseVersion;
+    finalVersion = packageVersion;
     npmTag = "latest";
-  } else if (context === "pre-release") {
-    const tagVersion = ref.replace("refs/tags/v", "");
-    if (!tagVersion.startsWith(`${baseVersion}-`)) {
-      throw new Error(
-        `Pre-release tag "${tagVersion}" must be a suffix of base version "${baseVersion}".`,
-      );
-    }
-    finalVersion = tagVersion;
-
-    // Extract npm tag from the pre-release suffix (e.g., 1.0.2-rc.1 -> rc)
-    const preReleasePart = tagVersion.split("-")[1];
-    npmTag = preReleasePart.split(".")[0];
-  } else if (context === "main") {
-    finalVersion = `${baseVersion}-pre`;
-    npmTag = "next";
   } else if (context === "pr" && prNumber !== undefined) {
     finalVersion = `${baseVersion}-pre-pr${prNumber}`;
     npmTag = `pr-${prNumber}`;
@@ -140,9 +129,6 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     npmrcPaths: ".",
   });
 
-  // Add GitHub token for release API operations
-  container = container.withSecretVariable("GH_TOKEN", githubToken);
-
   // Install Dependencies (Layered Cache)
   container = withInstalledDependencies(container, ".", {
     npmCiArgs: ["--workspaces=false"],
@@ -167,40 +153,6 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     npm publish --tag ${shellQuote(npmTag)}
     `,
   ]);
-
-  // Create GitHub prerelease for main/pre-release lines
-  if (context === "main" || context === "pre-release") {
-    const githubTag = `v${finalVersion}`;
-
-    container = container.withExec([
-      "bash",
-      "-c",
-      `${STRICT_SHELL_HEADER}
-      # Ensure curl is available for GitHub API
-      if ! command -v curl >/dev/null; then
-        apt-get update -y && apt-get install -y curl
-      fi
-
-      echo "Checking existing release ${githubTag}"
-      status=$(curl -s -o /tmp/release-status -w "%{http_code}" \
-        -H "Authorization: token \${GH_TOKEN}" \
-        -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/${repoOwner}/${repoName}/releases/tags/${githubTag}")
-
-      if [ "$status" -eq 404 ]; then
-        echo "Creating prerelease ${githubTag}"
-        curl -s -X POST \
-          -H "Authorization: token \${GH_TOKEN}" \
-          -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/${repoOwner}/${repoName}/releases" \
-          -d '{"tag_name":"${githubTag}","name":"${githubTag}","body":"Automated pre-release for ${finalVersion}","prerelease":true}' \
-          > /tmp/release-create.json
-        cat /tmp/release-create.json
-      else
-        echo "Release ${githubTag} exists (HTTP \${status}), skipping create."
-      fi`,
-    ]);
-  }
 
   return container.stdout();
 }

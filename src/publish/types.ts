@@ -1,6 +1,6 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 
-export type PublishContextType = "release" | "main" | "pr" | "pre-release";
+export type PublishContextType = "release" | "pr";
 
 export interface PublishOptions {
   /**
@@ -9,12 +9,12 @@ export interface PublishOptions {
   source: Directory;
 
   /**
-   * Git ref triggering the workflow (e.g. refs/heads/main, refs/tags/v1.2.3).
+   * Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
    */
   ref: string;
 
   /**
-   * GitHub event name (e.g. push, release, workflow_dispatch).
+   * GitHub event name (e.g. release, workflow_dispatch).
    */
   eventName: string;
 
