@@ -24,6 +24,8 @@ Functions:
 - `playwright-test`: installs dependencies, provisions Playwright browsers, optionally runs build, and executes E2E tests
 - `verify-chromium-bidi`: validates that `chromium-bidi` is installed in the selected package path
 - `deploy-webhosting`: installs, builds, and deploys a Firebase Hosting project
+- `deployApphosting`: creates or updates a Firebase App Hosting backend and returns its service URL
+- `deleteBackend`: deletes a Firebase App Hosting backend
 
 ## Usage
 

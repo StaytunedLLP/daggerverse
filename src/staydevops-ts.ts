@@ -1,4 +1,5 @@
 import {
+  Container,
   Directory,
   Secret,
   argument,
@@ -6,6 +7,11 @@ import {
   func,
   object,
 } from "@dagger.io/dagger";
+import {
+  deleteFirebaseApphostingBackend,
+  deployFirebaseApphostingProject,
+} from "./firebase/app-hosting.js";
+import { firebaseAppHostingBase } from "./firebase/base.js";
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
@@ -32,6 +38,17 @@ function requireSource(source?: Directory): Directory {
  */
 @object()
 export class StaydevopsTs {
+  /**
+   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
+   *
+   * @example
+   * dagger call base
+   */
+  @func()
+  base(): Container {
+    return firebaseAppHostingBase();
+  }
+
   private async runDefaultCheck(
     source: Directory | undefined,
     mode: CheckMode,
@@ -191,6 +208,72 @@ export class StaydevopsTs {
       packagePaths,
       verifyChromiumBidi: true,
     });
+  }
+
+  /**
+   * Deploys the application to Firebase App Hosting using source-based deployment.
+   *
+   * @param source - Repository source directory containing the application to deploy.
+   * @param projectId - Firebase project ID used for deployment.
+   * @param backendId - Firebase App Hosting backend identifier.
+   * @param rootDir - Application root directory inside the source tree.
+   * @param appId - Optional Firebase app ID used when creating a backend.
+   * @param region - Firebase App Hosting region.
+   * @param gcpCredentials - Optional GCP service account secret.
+   * @param wifProvider - Workload Identity Federation provider resource name.
+   * @param wifServiceAccount - Workload Identity Federation service account email.
+   * @param wifOidcToken - Optional OIDC token secret for WIF authentication.
+   * @param wifAudience - Optional WIF audience override.
+   *
+   * @example
+   * dagger call deploy-apphosting --source . --project-id "my-project" --backend-id "backend-id"
+   */
+  @func()
+  async deployApphosting(
+    source: Directory,
+    projectId: string,
+    backendId: string,
+    rootDir = ".",
+    appId = "",
+    region = "asia-southeast1",
+    gcpCredentials?: Secret,
+    wifProvider = "",
+    wifServiceAccount = "",
+    wifOidcToken?: Secret,
+    wifAudience = "",
+  ): Promise<string> {
+    return deployFirebaseApphostingProject(
+      source,
+      projectId,
+      backendId,
+      rootDir,
+      appId,
+      region,
+      gcpCredentials,
+      wifProvider,
+      wifServiceAccount,
+      wifOidcToken,
+      wifAudience,
+    );
+  }
+
+  /**
+   * Deletes a Firebase App Hosting backend.
+   *
+   * @param projectId - Firebase project ID.
+   * @param backendId - Firebase App Hosting backend identifier.
+   * @param gcpCredentials - Optional GCP service account secret.
+   *
+   * @example
+   * dagger call delete-backend --project-id "my-project" --backend-id "backend-id"
+   */
+  @func()
+  async deleteBackend(
+    projectId: string,
+    backendId: string,
+    gcpCredentials?: Secret,
+  ): Promise<string> {
+    return deleteFirebaseApphostingBackend(projectId, backendId, gcpCredentials);
   }
 
   /**
