@@ -11,11 +11,11 @@ import { normalizePaths } from "../shared/path-utils.js";
 import { withFirebaseTooling } from "./tooling.js";
 import type { CopilotWorkspaceOptions } from "./types.js";
 
-export async function prepareNodeWorkspace(
+export function prepareNodeWorkspace(
   source: Directory,
   nodeAuthToken?: Secret,
   options: CopilotWorkspaceOptions = {},
-): Promise<Directory> {
+): Directory {
   const packagePaths = normalizePaths(options.packagePaths);
 
   let container = createNodeWorkspace(source, nodeAuthToken, {
@@ -39,5 +39,5 @@ export async function prepareNodeWorkspace(
     });
   }
 
-  return withFullSource(container, source).directory(DEFAULT_WORKSPACE);
+  return container.directory(DEFAULT_WORKSPACE);
 }

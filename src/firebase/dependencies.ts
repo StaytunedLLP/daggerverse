@@ -1,7 +1,7 @@
-import { Directory, Secret } from "@dagger.io/dagger";
+import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { DEFAULT_REGISTRY_SCOPE } from "../shared/constants.js";
 import { maybeResolveNodeAuthToken } from "../shared/auth.js";
-import { withNpmAuth } from "../shared/npm.js";
+import { withNpmAuth, withFullSource } from "../shared/npm.js";
 import { firebaseNodeBase } from "./base.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
 
@@ -10,11 +10,11 @@ export type FirebaseInstallOptions = {
   registryScope?: string;
 };
 
-export async function installFirebaseDependencies(
+export function installFirebaseDependencies(
   source: Directory,
   directories: string[],
   options: FirebaseInstallOptions = {},
-): Promise<Directory> {
+): Container {
   let container = firebaseNodeBase();
   const resolvedNodeAuthToken = maybeResolveNodeAuthToken(options.nodeAuthToken);
 
@@ -26,35 +26,30 @@ export async function installFirebaseDependencies(
     });
   }
 
-  for (const dir of directories.filter((entry) => entry.trim().length > 0)) {
-    const path = dir.trim();
+  const dirs = directories
+    .map((d) => d.trim())
+    .filter((d) => d.length > 0);
+
+  for (const path of dirs) {
     const dirRef = source.directory(path);
-    const entries = await dirRef.entries();
 
-    if (!entries.includes("package.json")) {
-      container = container.withDirectory(`${FIREBASE_WORKDIR}/${path}`, dirRef);
-      continue;
-    }
-
-    let workspace = container
+    // Layered dependency installation with lazy evaluation and robustness.
+    // We use withDirectory with include filters to lazily copy only manifest files if they exist.
+    // This avoids early-awaiting on host directory entries and prevents crashes if files are missing.
+    container = container
       .withWorkdir(`${FIREBASE_WORKDIR}/${path}`)
-      .withFile("package.json", dirRef.file("package.json"));
-
-    if (!entries.includes("package-lock.json")) {
-      throw new Error(`Missing ${path}/package-lock.json`);
-    }
-
-    workspace = workspace.withFile(
-      "package-lock.json",
-      dirRef.file("package-lock.json"),
-    );
-
-    if (entries.includes(".npmrc")) {
-      workspace = workspace.withFile(".npmrc", dirRef.file(".npmrc"));
-    }
-
-    container = workspace.withExec(["npm", "ci"]).withDirectory(".", dirRef);
+      .withDirectory(".", dirRef, {
+        include: ["package.json", "package-lock.json", ".npmrc"],
+      })
+      .withExec([
+        "bash",
+        "-c",
+        "if [ -f package.json ]; then npm ci; fi",
+      ]);
   }
 
-  return container.withDirectory(FIREBASE_WORKDIR, source).directory(FIREBASE_WORKDIR);
+  return withFullSource(container, source, {
+    workspace: FIREBASE_WORKDIR,
+    strategy: "overlay",
+  });
 }

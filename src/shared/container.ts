@@ -14,11 +14,15 @@ export function createBaseNodeContainer(
 ): Container {
   const workspace = options.workspace ?? DEFAULT_WORKSPACE;
 
-  return dag
+  let container = dag
     .container()
     .from(options.image ?? DEFAULT_IMAGE)
     .withWorkdir(workspace)
     .withEnvVariable("HUSKY", "0");
+
+  container = withNpmCache(container);
+
+  return container;
 }
 
 export function withMountedCache(

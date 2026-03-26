@@ -120,14 +120,22 @@ export function withInstalledDependencies(
   const workspace = options.workspace ?? DEFAULT_WORKSPACE;
   const npmCiArgs = options.npmCiArgs ?? [];
   const installArgs = ["npm", "ci", ...npmCiArgs].map(shellQuote).join(" ");
-  const scripts = [STRICT_SHELL_HEADER];
+  const paths = normalizePaths(packagePaths);
 
-  for (const packagePath of normalizePaths(packagePaths)) {
-    scripts.push(buildRequireLockfileScript(workspace, packagePath));
-    scripts.push(installArgs);
+  let result = container;
+  for (const packagePath of paths) {
+    result = result.withExec([
+      "bash",
+      "-lc",
+      [
+        STRICT_SHELL_HEADER,
+        buildRequireLockfileScript(workspace, packagePath),
+        installArgs,
+      ].join("\n"),
+    ]);
   }
 
-  return container.withExec(["bash", "-lc", scripts.join("\n")]);
+  return result;
 }
 
 export function withFullSource(

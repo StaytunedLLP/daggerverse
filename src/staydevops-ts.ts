@@ -50,11 +50,11 @@ export class StaydevopsTs {
     return firebaseAppHostingBase();
   }
 
-  private async runDefaultCheck(
+  private runDefaultCheck(
     source: Directory | undefined,
     mode: CheckMode,
-  ): Promise<void> {
-    await runNodeChecks(requireSource(source), undefined, {
+  ): Container {
+    return runNodeChecks(requireSource(source), undefined, {
       [mode]: true,
     });
   }
@@ -69,14 +69,14 @@ export class StaydevopsTs {
    */
   @check()
   @func()
-  async format(
+  format(
     @argument({
       defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "format");
+  ): Container {
+    return this.runDefaultCheck(source, "format");
   }
 
   /**
@@ -88,8 +88,11 @@ export class StaydevopsTs {
    * dagger call git-diff-staged --source .
    */
   @func()
-  async gitDiffStaged(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+  gitDiffStaged(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
     source: Directory,
   ): Promise<string[]> {
     return gitDiffStaged(source);
@@ -104,8 +107,11 @@ export class StaydevopsTs {
    * dagger call git-diff-previous --source .
    */
   @func()
-  async gitDiffPrevious(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+  gitDiffPrevious(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
     source: Directory,
   ): Promise<string[]> {
     return gitDiffPrevious(source);
@@ -121,8 +127,11 @@ export class StaydevopsTs {
    * dagger call git-diff-between-commits --source . --commit-range "HEAD~2..HEAD"
    */
   @func()
-  async gitDiffBetweenCommits(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+  gitDiffBetweenCommits(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
     source: Directory,
     commitRange: string,
   ): Promise<string[]> {
@@ -139,14 +148,14 @@ export class StaydevopsTs {
    */
   @check()
   @func()
-  async lint(
+  lint(
     @argument({
       defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "lint");
+  ): Container {
+    return this.runDefaultCheck(source, "lint");
   }
 
   /**
@@ -159,14 +168,14 @@ export class StaydevopsTs {
    */
   @check()
   @func()
-  async build(
+  build(
     @argument({
       defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "build");
+  ): Container {
+    return this.runDefaultCheck(source, "build");
   }
 
   /**
@@ -179,14 +188,14 @@ export class StaydevopsTs {
    */
   @check()
   @func()
-  async test(
+  test(
     @argument({
       defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "test");
+  ): Container {
+    return this.runDefaultCheck(source, "test");
   }
 
   /**
@@ -200,11 +209,15 @@ export class StaydevopsTs {
    * dagger call verify-chromium-bidi --source . --package-paths "./apps/web"
    */
   @func()
-  async verifyChromiumBidi(
+  verifyChromiumBidi(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     nodeAuthToken?: Secret,
     packagePaths = ".",
-  ): Promise<string> {
+  ): Container {
     return runNodeChecks(source, nodeAuthToken, {
       packagePaths,
       verifyChromiumBidi: true,
@@ -290,13 +303,17 @@ export class StaydevopsTs {
    * dagger call prepare-node-workspace --source . --playwright-install
    */
   @func()
-  async prepareNodeWorkspace(
+  prepareNodeWorkspace(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     nodeAuthToken?: Secret,
     packagePaths = ".",
     playwrightInstall = false,
     firebaseTools = false,
-  ): Promise<Directory> {
+  ): Directory {
     return prepareNodeWorkspace(source, nodeAuthToken, {
       packagePaths,
       playwrightInstall,
@@ -320,7 +337,11 @@ export class StaydevopsTs {
    * dagger call playwright-test --source . --package-paths "apps/web"
    */
   @func()
-  async playwrightTest(
+  playwrightTest(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     nodeAuthToken?: Secret,
     packagePaths = ".",
@@ -329,7 +350,7 @@ export class StaydevopsTs {
     runBuild = true,
     registryScope = "staytunedllp",
     browsers = "chromium",
-  ): Promise<string> {
+  ): Container {
     return runPlaywrightTests(source, {
       nodeAuthToken,
       packagePaths,
@@ -361,6 +382,10 @@ export class StaydevopsTs {
    */
   @func({ cache: "never" })
   async deployWebhosting(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     projectId: string,
     gcpCredentials: Secret,
@@ -372,17 +397,22 @@ export class StaydevopsTs {
     webappConfig?: Secret,
     extraEnv?: Secret,
     nodeAuthToken?: Secret,
-  ): Promise<string> {
-    return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
-      appId,
-      frontendDir,
-      backendDir,
-      firebaseDir,
-      only,
-      webappConfig,
-      extraEnv,
-      nodeAuthToken,
-    });
+  ): Promise<Container> {
+    return await firebaseDeployWebhostingPipeline(
+      source,
+      projectId,
+      gcpCredentials,
+      {
+        appId,
+        frontendDir,
+        backendDir,
+        firebaseDir,
+        only,
+        webappConfig,
+        extraEnv,
+        nodeAuthToken,
+      },
+    );
   }
 
   /**

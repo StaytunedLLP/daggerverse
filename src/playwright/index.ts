@@ -1,4 +1,4 @@
-import { Directory } from "@dagger.io/dagger";
+import { Container, Directory } from "@dagger.io/dagger";
 import {
   DEFAULT_PLAYWRIGHT_BROWSERS,
   DEFAULT_REGISTRY_SCOPE,
@@ -24,10 +24,10 @@ function normalizeBrowsers(browsers?: string): string[] {
   return normalized.length > 0 ? normalized : DEFAULT_PLAYWRIGHT_BROWSERS;
 }
 
-export async function runPlaywrightTests(
+export function runPlaywrightTests(
   source: Directory,
   options: PlaywrightTestOptions = {},
-): Promise<string> {
+): Container {
   const packagePaths = normalizePaths(options.packagePaths);
   const packagePath = packagePaths[0] ?? ".";
 
@@ -55,12 +55,10 @@ export async function runPlaywrightTests(
     });
   }
 
-  container = runNpmScript(container, options.testScript ?? "test:e2e", {
+  return runNpmScript(container, options.testScript ?? "test:e2e", {
     cwd: packagePath,
     args: options.testSelector ? [options.testSelector] : [],
   });
-
-  return container.stdout();
 }
 
 export type { PlaywrightTestOptions };

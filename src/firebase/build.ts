@@ -1,4 +1,4 @@
-import { Directory, Secret } from "@dagger.io/dagger";
+import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { firebaseNodeBase } from "./base.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
 import { withFrontendEnv } from "./env.js";
@@ -11,12 +11,18 @@ export type FirebaseBuildOptions = {
   extraEnv?: Secret;
 };
 
-export async function buildFirebaseProjects(
-  source: Directory,
+export function buildFirebaseProjects(
+  source: Directory | Container,
   directories: string[],
   options: FirebaseBuildOptions = {},
-): Promise<Directory> {
-  let container = firebaseNodeBase().withDirectory(FIREBASE_WORKDIR, source);
+): Directory {
+  let container: Container;
+
+  if (source instanceof Directory) {
+    container = firebaseNodeBase().withDirectory(FIREBASE_WORKDIR, source);
+  } else {
+    container = source;
+  }
 
   if (options.frontendDir && options.projectId) {
     container = withFrontendEnv(container, {

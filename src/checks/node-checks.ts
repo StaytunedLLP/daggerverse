@@ -1,4 +1,4 @@
-import { Directory, Secret } from "@dagger.io/dagger";
+import { Container, Directory, Secret } from "@dagger.io/dagger";
 import {
   DEFAULT_SOURCE_EXCLUDES,
   DEFAULT_WORKSPACE,
@@ -25,11 +25,11 @@ function buildVerifyScript(
   ].join("\n");
 }
 
-export async function runNodeChecks(
+export function runNodeChecks(
   source: Directory,
   nodeAuthToken?: Secret,
   options: NodeChecksOptions = {},
-): Promise<string> {
+): Container {
   const packagePaths = normalizePaths(options.packagePaths);
   let installed = createNodeWorkspace(source, nodeAuthToken, {
     packagePaths,
@@ -67,5 +67,5 @@ export async function runNodeChecks(
     }
   }
 
-  return workspace.stdout();
+  return workspace;
 }

@@ -1,7 +1,7 @@
 import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { maybeResolveNodeAuthToken } from "./auth.js";
 import { createBaseNodeContainer, withNpmCache, withPlaywrightCache } from "./container.js";
-import { withInstalledDependencies, withLockfilesOnly, withNpmAuth } from "./npm.js";
+import { withFullSource, withInstalledDependencies, withLockfilesOnly, withNpmAuth } from "./npm.js";
 import type { NodeWorkspaceOptions } from "./types.js";
 
 export function createNodeWorkspace(
@@ -13,8 +13,6 @@ export function createNodeWorkspace(
   let container = createBaseNodeContainer({
     workspace: options.workspace,
   });
-
-  container = withNpmCache(container);
 
   if (options.withPlaywrightCache !== false) {
     container = withPlaywrightCache(container);
@@ -33,8 +31,13 @@ export function createNodeWorkspace(
     });
   }
 
-  return withInstalledDependencies(container, options.packagePaths ?? ".", {
+  const installed = withInstalledDependencies(container, options.packagePaths ?? ".", {
     workspace: options.workspace,
     npmCiArgs: options.npmCiArgs,
+  });
+
+  return withFullSource(installed, source, {
+    workspace: options.workspace,
+    strategy: "overlay",
   });
 }
