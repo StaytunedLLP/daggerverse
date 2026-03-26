@@ -1,28 +1,36 @@
 name: Publish Package (Reference)
 
+# triggers: production from release-please GitHub Release + manual PR pre-release trigger
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*.*.*'
+  release:
+    types:
+      - published
   workflow_dispatch:
     inputs:
       branch:
-        description: 'The branch to publish from (must have an open PR)'
+        description: "The branch to publish from (must have an open PR)"
         required: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
   publish:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'release' &&
+        github.event.release.prerelease == false &&
+        github.event.release.target_commitish == 'main'
+      )
     runs-on: st-arc
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          # For workflow_dispatch, checkout the requested branch; otherwise use the release commit ref.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref }}
 
       - name: Bootstrap Dagger (ARC)
         uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
@@ -36,6 +44,7 @@ jobs:
         with:
           version: "0.20.1"
           verb: call
+          # To use in a different repo, change this module path to your published Dagger module path.
           module: github.com/StaytunedLLP/daggerverse
           args: >
             publish-package

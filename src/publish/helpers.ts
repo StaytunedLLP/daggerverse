@@ -5,7 +5,9 @@ import { STRICT_SHELL_HEADER } from "../shared/constants.js";
 /**
  * Parses package.json from the source directory and returns it as a JSON object.
  */
-export async function readPackageJson(source: Directory): Promise<PackageManifest> {
+export async function readPackageJson(
+  source: Directory,
+): Promise<PackageManifest> {
   const content = await source.file("package.json").contents();
   return JSON.parse(content) as PackageManifest;
 }
@@ -61,7 +63,9 @@ export async function getPRNumber(
     .filter((s) => s.length > 0);
 
   if (prNumbers.length === 0) {
-    throw new Error(`No open PR found for branch "${branch}" in ${repoOwner}/${repoName}.`);
+    throw new Error(
+      `No open PR found for branch "${branch}" in ${repoOwner}/${repoName}.`,
+    );
   }
   if (prNumbers.length > 1) {
     throw new Error(
@@ -97,5 +101,7 @@ export async function checkRegistryVersion(
   const parsed = JSON.parse(output);
 
   // If npm view returns the version string, it exists. If it returns null (or empty/error), it doesn't.
-  return parsed === version || (Array.isArray(parsed) && parsed.includes(version));
+  return (
+    parsed === version || (Array.isArray(parsed) && parsed.includes(version))
+  );
 }

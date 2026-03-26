@@ -304,18 +304,20 @@ export class StaydevopsTs {
 
   /**
    * Deterministic package publishing logic for npm packages.
+    * For merged release PRs, this also creates the GitHub Release after publishing the npm package and can finalize release labels.
    *
    * @param source - Repository source directory to publish from.
-   * @param ref - Git ref triggering the workflow (e.g. refs/heads/main, refs/tags/v1.2.3).
-   * @param eventName - GitHub event name (e.g. push, release, workflow_dispatch).
+   * @param ref - Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
+   * @param eventName - GitHub event name (allowed: release, workflow_dispatch).
    * @param githubToken - GitHub PAT for npm authentication and PR validation.
    * @param repoOwner - Repository owner (e.g. StaytunedLLP).
    * @param repoName - Repository name (e.g. devops).
    * @param inputBranch - Manual branch input provided for workflow_dispatch.
+  * @param releasePrNumber - Release PR number to finalize after publishing a merged release commit.
    * @param registryScope - The scope of the npm package (e.g. staytunedllp).
    *
    * @example
-   * dagger call publish-package --source . --ref "refs/heads/main" --event-name "push" --github-token env:GITHUB_TOKEN --repo-owner "StaytunedLLP" --repo-name "devops"
+   * dagger call publish-package --source . --ref "refs/tags/v1.2.3" --event-name "release" --github-token env:GITHUB_TOKEN --repo-owner "StaytunedLLP" --repo-name "devops"
    */
   @func({ cache: "never" })
   async publishPackage(
@@ -326,6 +328,7 @@ export class StaydevopsTs {
     repoOwner: string,
     repoName: string,
     inputBranch?: string,
+    releasePrNumber?: number,
     registryScope?: string,
   ): Promise<string> {
     return publishPackage({
@@ -333,6 +336,7 @@ export class StaydevopsTs {
       ref,
       eventName,
       inputBranch,
+      releasePrNumber,
       githubToken,
       repoOwner,
       repoName,

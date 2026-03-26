@@ -30,6 +30,7 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
     ref,
     eventName,
     inputBranch,
+    releasePrNumber,
     githubToken,
     repoOwner,
     repoName,
@@ -37,26 +38,32 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
 
   // 1. Resolve Context
   let context: PublishContextType;
-  if (ref.startsWith("refs/tags/v")) {
-    context = "release";
-  } else if (ref === "refs/heads/main" || ref === "main") {
+  if (eventName === "pull_request") {
     context = "main";
   } else if (eventName === "workflow_dispatch") {
-    context = "pr";
-    if (!inputBranch) {
-      throw new Error("Manual trigger (workflow_dispatch) requires inputBranch.");
+    context = releasePrNumber !== undefined ? "main" : "pr";
+    if (context === "pr" && !inputBranch) {
+      throw new Error(
+        "Manual trigger (workflow_dispatch) requires inputBranch.",
+      );
     }
   } else {
-    throw new Error(`Unsupported trigger: ref=${ref}, event=${eventName}`);
+    throw new Error(
+      `Unsupported event \"${eventName}\". Allowed events: pull_request, workflow_dispatch.`,
+    );
   }
 
   // 2. Read package.json
   const manifest = await readPackageJson(source);
-  const baseVersion = manifest.version;
+  const packageVersion = manifest.version;
   const packageName = manifest.name;
 
   // 3. Validate Base Version
-  validateBaseVersion(baseVersion);
+  validateBaseVersion(packageVersion);
+
+  // For merged release-PR publish, use the version in package.json from the merged commit.
+  // For manual PR publish, use the version from the selected PR branch package.json.
+  let baseVersion = packageVersion;
 
   // 4. Resolve PR Number if needed
   let prNumber: number | undefined;
@@ -68,18 +75,9 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   let finalVersion: string;
   let npmTag: string;
 
-  if (context === "release") {
-    const tagVersion = ref.replace("refs/tags/v", "");
-    if (tagVersion !== baseVersion) {
-      throw new Error(
-        `Tag version "${tagVersion}" does not match package.json version "${baseVersion}".`,
-      );
-    }
-    finalVersion = baseVersion;
+  if (context === "main") {
+    finalVersion = packageVersion;
     npmTag = "latest";
-  } else if (context === "main") {
-    finalVersion = `${baseVersion}-pre`;
-    npmTag = "next";
   } else if (context === "pr" && prNumber !== undefined) {
     finalVersion = `${baseVersion}-pre-pr${prNumber}`;
     npmTag = `pr-${prNumber}`;
@@ -88,15 +86,21 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   }
 
   // 6. Registry Conflict Check
-  const exists = await checkRegistryVersion(packageName, finalVersion, githubToken);
-  if (exists) {
+  const exists = await checkRegistryVersion(
+    packageName,
+    finalVersion,
+    githubToken,
+  );
+  if (exists && context === "pr") {
     throw new Error(
       `Version "${finalVersion}" of package "${packageName}" already exists in registry.`,
     );
   }
 
   // 7. Prepare Container and Publish
-  const registryScope = options.registryScope || extractScope(packageName) || "staytunedllp";
+  const registryScope =
+    options.registryScope || extractScope(packageName) || "staytunedllp";
+  const releaseTag = `v${finalVersion}`;
 
   let container = dag
     .container()
@@ -124,6 +128,8 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
   // Add Full Source
   container = withFullSource(container, source);
 
+  const skipNpmPublish = exists && context === "main";
+
   // Override Version and Publish
   container = container.withExec([
     "bash",
@@ -137,7 +143,9 @@ export async function publishPackage(options: PublishOptions): Promise<string> {
       fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
     '
     npm run build:publish
-    npm publish --tag ${shellQuote(npmTag)}
+    if [[ "${skipNpmPublish}" != "true" ]]; then
+      npm publish --tag ${shellQuote(npmTag)}
+    fi
     `,
   ]);
 

@@ -1,6 +1,6 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 
-export type PublishContextType = "release" | "main" | "pr";
+export type PublishContextType = "main" | "pr";
 
 export interface PublishOptions {
   /**
@@ -9,12 +9,12 @@ export interface PublishOptions {
   source: Directory;
 
   /**
-   * Git ref triggering the workflow (e.g. refs/heads/main, refs/tags/v1.2.3).
+   * Git ref for the commit being published (e.g. a merged release-PR commit SHA or a branch ref for manual dispatch).
    */
   ref: string;
 
   /**
-   * GitHub event name (e.g. push, release, workflow_dispatch).
+   * GitHub event name (e.g. pull_request, workflow_dispatch).
    */
   eventName: string;
 
@@ -22,6 +22,11 @@ export interface PublishOptions {
    * Manual branch input provided for workflow_dispatch.
    */
   inputBranch?: string;
+
+  /**
+   * Release PR number to finalize after publishing a merged release commit.
+   */
+  releasePrNumber?: number;
 
   /**
    * GitHub PAT for npm authentication and PR validation.
