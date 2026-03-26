@@ -6,6 +6,7 @@ import {
   func,
   object,
 } from "@dagger.io/dagger";
+import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
@@ -169,6 +170,18 @@ export class StaydevopsTs {
     source?: Directory,
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
+  }
+
+  /**
+   * Validates the PR title according to Conventional Commits naming convention.
+   *
+   * @example
+   * dagger call check-pr-title
+   */
+  @check()
+  @func()
+  async checkPrTitle(): Promise<void> {
+    await checkPrTitleFromEvent();
   }
 
   /**
