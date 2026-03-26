@@ -163,17 +163,10 @@ export async function deleteFirebaseApphostingBackend(
   backendId: string,
   gcpCredentials?: Secret,
 ): Promise<string> {
-  const container =
-    gcpCredentials ?
-      firebaseAppHostingBase()
-        .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
-        .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
-        .withEnvVariable(
-          "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-          GCP_CREDENTIALS_PATH,
-        )
-        .withoutEnvVariable("FIREBASE_TOKEN")
-    : firebaseAppHostingBase();
+  const container = withAppHostingAuth(
+    firebaseAppHostingBase(),
+    gcpCredentials,
+  );
 
   return container
     .withExec([
