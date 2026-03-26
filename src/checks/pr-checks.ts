@@ -12,22 +12,31 @@ const ALLOWED_PREFIXES = [
 ];
 
 /**
- * Validates a PR title against the Conventional Commits-inspired format.
+ * Validates a PR title against the Conventional Commits 1.0.0 specification.
  *
  * @param title - The PR title to validate.
  * @throws Error if the title is invalid.
  */
 export function validatePrTitle(title: string): void {
   const prefixPattern = ALLOWED_PREFIXES.join("|");
-  // Matches: <prefix>[(<scope>)]: <description>
-  // Case-sensitive, supports optional space after colon, supports optional scope.
-  const regex = new RegExp(`^(${prefixPattern})(\\([\\w.-]+\\))?:.*$`);
+  // Conventional Commits 1.0.0:
+  // <type>[optional scope][optional !]: <description>
+  // MUST be followed by REQUIRED terminal colon and space.
+  const regex = new RegExp(`^(${prefixPattern})(\\([\\w.-]+\\))?!?: .+$`);
 
   if (!regex.test(title)) {
+    let reason = "The title must follow the pattern: <type>[optional scope][optional !]: <description>";
+
+    if (!ALLOWED_PREFIXES.some(p => title.startsWith(p))) {
+      reason = `The type must be one of: ${ALLOWED_PREFIXES.join(", ")}.`;
+    } else if (!title.includes(": ")) {
+      reason = "A space MUST follow the terminal colon after the type/scope (e.g., 'feat: my feature').";
+    } else if (title.includes("(!)")) {
+      reason = "Breaking changes are indicated by a '!' before the colon (e.g., 'feat!: description'), not inside the scope.";
+    }
+
     throw new Error(
-      `PR title "${title}" does not follow the naming convention. It must start with one of: ${ALLOWED_PREFIXES.join(
-        ", ",
-      )} (e.g., "feat: my feature" or "feat(scope): my feature").`,
+      `PR title "${title}" is invalid according to Conventional Commits 1.0.0. ${reason}`,
     );
   }
 }
