@@ -1,0 +1,12 @@
+{
+  "name": "@staytunedllp/planning-sync",
+  "version": "1.0.0",
+  "description": "Planning sync scripts for Dagger module",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
