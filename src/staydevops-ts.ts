@@ -245,6 +245,12 @@ export class StaydevopsTs {
    *
    * @example
    * dagger call git-diff --source . --mode staged
+   *
+   * @example
+   * dagger call git-diff --source . --mode previous
+   *
+   * @example
+   * dagger call git-diff --source . --mode between --commit-range "HEAD~2..HEAD"
    */
   @func()
   async gitDiff(
@@ -286,6 +292,9 @@ export class StaydevopsTs {
    *
    * @example
    * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "backend-id"
+   *
+   * @example
+   * dagger call fb-apphosting --action delete --project-id "my-project" --backend-id "backend-id"
    */
   @func()
   async fbApphosting(
