@@ -22,259 +22,21 @@ import {
 } from "./git/index.js";
 import { publishPackage } from "./publish/index.js";
 import { runPlaywrightTests } from "./playwright/index.js";
-import { DEFAULT_SOURCE_EXCLUDES } from "./shared/constants.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
 
-function requireSource(source?: Directory): Directory {
-  if (!source) {
-    throw new Error("source is required");
-  }
-
-  return source;
-}
-
 /**
- * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
+ * Collection of repository checks and validation tools.
  */
 @object()
-export class StaydevopsTs {
-  /**
-   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
-   *
-   * @example
-   * dagger call base
-   */
-  @func()
-  base(): Container {
-    return firebaseAppHostingBase();
-  }
-
+export class Checks {
   private async runDefaultCheck(
-    source: Directory | undefined,
+    source: Directory,
     mode: CheckMode,
   ): Promise<void> {
-    await runNodeChecks(requireSource(source), undefined, {
+    await runNodeChecks(source, undefined, {
       [mode]: true,
     });
-  }
-
-  /**
-   * Run the repository formatting check with `npm run format:check`.
-   *
-   * @param source - Repository source directory to validate.
-   *
-   * @example
-   * dagger call format --source .
-   */
-  @check()
-  @func()
-  async format(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "format");
-  }
-
-  /**
-   * Retrieves an array of files that are staged for commit.
-   *
-   * @param source - The source directory to check for staged files.
-   *
-   * @example
-   * dagger call git-diff-staged --source .
-   */
-  @func()
-  async gitDiffStaged(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    source: Directory,
-  ): Promise<string[]> {
-    return gitDiffStaged(source);
-  }
-
-  /**
-   * Retrieves an array of files from the previous commit.
-   *
-   * @param source - The source directory to check for files in the previous commit.
-   *
-   * @example
-   * dagger call git-diff-previous --source .
-   */
-  @func()
-  async gitDiffPrevious(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    source: Directory,
-  ): Promise<string[]> {
-    return gitDiffPrevious(source);
-  }
-
-  /**
-   * Retrieves an array of files that have changed between two commits.
-   *
-   * @param source - The source directory to check for files in the commit range.
-   * @param commitRange - A string specifying the range of commits.
-   *
-   * @example
-   * dagger call git-diff-between-commits --source . --commit-range "HEAD~2..HEAD"
-   */
-  @func()
-  async gitDiffBetweenCommits(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    source: Directory,
-    commitRange: string,
-  ): Promise<string[]> {
-    return gitDiffBetweenCommits(source, commitRange);
-  }
-
-  /**
-   * Run the repository linter with `npm run lint`.
-   *
-   * @param source - Repository source directory to lint.
-   *
-   * @example
-   * dagger call lint --source .
-   */
-  @check()
-  @func()
-  async lint(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "lint");
-  }
-
-  /**
-   * Run the repository build with `npm run build`.
-   *
-   * @param source - Repository source directory to build.
-   *
-   * @example
-   * dagger call build --source .
-   */
-  @check()
-  @func()
-  async build(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "build");
-  }
-
-  /**
-   * Run the repository test suite with `npm run test`.
-   *
-   * @param source - Repository source directory to test.
-   *
-   * @example
-   * dagger call test --source .
-   */
-  @check()
-  @func()
-  async test(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source?: Directory,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "test");
-  }
-
-  /**
-   * Validate that `chromium-bidi` is installed in the selected package path.
-   *
-   * @param source - Repository source directory that contains the package to inspect.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
-   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
-   *
-   * @example
-   * dagger call verify-chromium-bidi --source . --package-paths "./apps/web"
-   */
-  @func()
-  async verifyChromiumBidi(
-    source: Directory,
-    nodeAuthToken?: Secret,
-    packagePaths = ".",
-  ): Promise<string> {
-    return runNodeChecks(source, nodeAuthToken, {
-      packagePaths,
-      verifyChromiumBidi: true,
-    });
-  }
-
-  /**
-   * Deploys the application to Firebase App Hosting using source-based deployment.
-   *
-   * @param source - Repository source directory containing the application to deploy.
-   * @param projectId - Firebase project ID used for deployment.
-   * @param backendId - Firebase App Hosting backend identifier.
-   * @param rootDir - Application root directory inside the source tree.
-   * @param appId - Optional Firebase app ID used when creating a backend.
-   * @param region - Firebase App Hosting region.
-   * @param gcpCredentials - Optional GCP service account secret.
-   * @param wifProvider - Workload Identity Federation provider resource name.
-   * @param wifServiceAccount - Workload Identity Federation service account email.
-   * @param wifOidcToken - Optional OIDC token secret for WIF authentication.
-   * @param wifAudience - Optional WIF audience override.
-   *
-   * @example
-   * dagger call deploy-apphosting --source . --project-id "my-project" --backend-id "backend-id"
-   */
-  @func()
-  async deployApphosting(
-    source: Directory,
-    projectId: string,
-    backendId: string,
-    rootDir = ".",
-    appId = "",
-    region = "asia-southeast1",
-    gcpCredentials?: Secret,
-    wifProvider = "",
-    wifServiceAccount = "",
-    wifOidcToken?: Secret,
-    wifAudience = "",
-  ): Promise<string> {
-    return deployFirebaseApphostingProject(
-      source,
-      projectId,
-      backendId,
-      rootDir,
-      appId,
-      region,
-      gcpCredentials,
-      wifProvider,
-      wifServiceAccount,
-      wifOidcToken,
-      wifAudience,
-    );
-  }
-
-  /**
-   * Deletes a Firebase App Hosting backend.
-   *
-   * @param projectId - Firebase project ID.
-   * @param backendId - Firebase App Hosting backend identifier.
-   * @param gcpCredentials - Optional GCP service account secret.
-   *
-   * @example
-   * dagger call delete-backend --project-id "my-project" --backend-id "backend-id"
-   */
-  @func()
-  async deleteBackend(
-    projectId: string,
-    backendId: string,
-    gcpCredentials?: Secret,
-  ): Promise<string> {
-    return deleteFirebaseApphostingBackend(projectId, backendId, gcpCredentials);
   }
 
   /**
@@ -287,10 +49,14 @@ export class StaydevopsTs {
    * @param firebaseTools - When true, installs Firebase CLI tooling in the prepared workspace container.
    *
    * @example
-   * dagger call prepare-node-workspace --source . --playwright-install
+   * dagger call checks install --source . --playwright-install
    */
   @func()
-  async prepareNodeWorkspace(
+  async install(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     nodeAuthToken?: Secret,
     packagePaths = ".",
@@ -302,6 +68,86 @@ export class StaydevopsTs {
       playwrightInstall,
       firebaseTools,
     });
+  }
+
+  /**
+   * Run the repository formatting check with `npm run format:check`.
+   *
+   * @param source - Repository source directory to validate.
+   *
+   * @example
+   * dagger call checks format --source .
+   */
+  @check()
+  @func()
+  async format(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runDefaultCheck(source, "format");
+  }
+
+  /**
+   * Run the repository linter with `npm run lint`.
+   *
+   * @param source - Repository source directory to lint.
+   *
+   * @example
+   * dagger call checks lint --source .
+   */
+  @check()
+  @func()
+  async lint(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runDefaultCheck(source, "lint");
+  }
+
+  /**
+   * Run the repository build with `npm run build`.
+   *
+   * @param source - Repository source directory to build.
+   *
+   * @example
+   * dagger call checks build --source .
+   */
+  @check()
+  @func()
+  async build(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runDefaultCheck(source, "build");
+  }
+
+  /**
+   * Run the repository test suite with `npm run test`.
+   *
+   * @param source - Repository source directory to test.
+   *
+   * @example
+   * dagger call checks test --source .
+   */
+  @check()
+  @func()
+  async test(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runDefaultCheck(source, "test");
   }
 
   /**
@@ -317,10 +163,14 @@ export class StaydevopsTs {
    * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
    *
    * @example
-   * dagger call playwright-test --source . --package-paths "apps/web"
+   * dagger call checks test-playwright --source . --package-paths "apps/web"
    */
   @func()
-  async playwrightTest(
+  async testPlaywright(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
     source: Directory,
     nodeAuthToken?: Secret,
     packagePaths = ".",
@@ -330,6 +180,9 @@ export class StaydevopsTs {
     registryScope = "staytunedllp",
     browsers = "chromium",
   ): Promise<string> {
+    // Verify chromium-bidi using the private helper
+    await this.verifyChromiumBidi(source, nodeAuthToken, packagePaths);
+
     return runPlaywrightTests(source, {
       nodeAuthToken,
       packagePaths,
@@ -339,6 +192,145 @@ export class StaydevopsTs {
       registryScope,
       browsers,
     });
+  }
+
+  /**
+   * Validate that `chromium-bidi` is installed in the selected package path.
+   *
+   * @param source - Repository source directory that contains the package to inspect.
+   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
+   */
+  private async verifyChromiumBidi(
+    source: Directory,
+    nodeAuthToken?: Secret,
+    packagePaths = ".",
+  ): Promise<string> {
+    return runNodeChecks(source, nodeAuthToken, {
+      packagePaths,
+      verifyChromiumBidi: true,
+    });
+  }
+}
+
+/**
+ * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
+ */
+@object()
+export class StaydevopsTs {
+  /**
+   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
+   */
+  private base(): Container {
+    return firebaseAppHostingBase();
+  }
+
+  /**
+   * Returns the collection of repository checks.
+   *
+   * @example
+   * dagger call checks lint --source .
+   */
+  @func()
+  checks(): Checks {
+    return new Checks();
+  }
+
+  /**
+   * Retrieves an array of changed files based on the specified mode.
+   *
+   * @param source - The source directory to check for changed files.
+   * @param mode - The diff mode to use: 'staged', 'previous', or 'between'.
+   * @param commitRange - A string specifying the range of commits (required for 'between' mode).
+   *
+   * @example
+   * dagger call git-diff --source . --mode staged
+   */
+  @func()
+  async gitDiff(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    source: Directory,
+    mode: "staged" | "previous" | "between" = "staged",
+    commitRange = "",
+  ): Promise<string[]> {
+    switch (mode) {
+      case "staged":
+        return gitDiffStaged(source);
+      case "previous":
+        return gitDiffPrevious(source);
+      case "between":
+        if (!commitRange) {
+          throw new Error("commitRange is required for 'between' mode");
+        }
+        return gitDiffBetweenCommits(source, commitRange);
+      default:
+        throw new Error(`Unsupported mode: ${mode}`);
+    }
+  }
+
+  /**
+   * Performs actions on Firebase App Hosting backends.
+   *
+   * @param action - The action to perform: 'deploy' or 'delete'.
+   * @param projectId - Firebase project ID used for deployment.
+   * @param backendId - Firebase App Hosting backend identifier.
+   * @param source - Repository source directory containing the application to deploy (required for deploy).
+   * @param rootDir - Application root directory inside the source tree (deploy only).
+   * @param appId - Optional Firebase app ID used when creating a backend (deploy only).
+   * @param region - Firebase App Hosting region (deploy only).
+   * @param gcpCredentials - Optional GCP service account secret.
+   * @param wifProvider - Workload Identity Federation provider resource name (deploy only).
+   * @param wifServiceAccount - Workload Identity Federation service account email (deploy only).
+   * @param wifOidcToken - Optional OIDC token secret for WIF authentication (deploy only).
+   * @param wifAudience - Optional WIF audience override (deploy only).
+   *
+   * @example
+   * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "backend-id"
+   */
+  @func()
+  async fbApphosting(
+    action: "deploy" | "delete",
+    projectId: string,
+    backendId: string,
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    source?: Directory,
+    rootDir = ".",
+    appId = "",
+    region = "asia-southeast1",
+    gcpCredentials?: Secret,
+    wifProvider = "",
+    wifServiceAccount = "",
+    wifOidcToken?: Secret,
+    wifAudience = "",
+  ): Promise<string> {
+    if (action === "deploy") {
+      if (!source) {
+        throw new Error("source is required for 'deploy' action");
+      }
+      return deployFirebaseApphostingProject(
+        source,
+        projectId,
+        backendId,
+        rootDir,
+        appId,
+        region,
+        gcpCredentials,
+        wifProvider,
+        wifServiceAccount,
+        wifOidcToken,
+        wifAudience,
+      );
+    }
+
+    if (action === "delete") {
+      return deleteFirebaseApphostingBackend(
+        projectId,
+        backendId,
+        gcpCredentials,
+      );
+    }
+
+    throw new Error(`Unsupported action: ${action}`);
   }
 
   /**
@@ -357,10 +349,11 @@ export class StaydevopsTs {
    * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.
    *
    * @example
-   * dagger call deploy-webhosting --source . --project-id "my-firebase-project" --gcp-credentials env:GCP_CREDENTIALS
+   * dagger call fb-webhosting --source . --project-id "my-firebase-project" --gcp-credentials env:GCP_CREDENTIALS
    */
   @func({ cache: "never" })
-  async deployWebhosting(
+  async fbWebhosting(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
     projectId: string,
     gcpCredentials: Secret,
@@ -387,7 +380,7 @@ export class StaydevopsTs {
 
   /**
    * Deterministic package publishing logic for npm packages.
-    * For merged release PRs, this also creates the GitHub Release after publishing the npm package and can finalize release labels.
+   * For merged release PRs, this also creates the GitHub Release after publishing the npm package and can finalize release labels.
    *
    * @param source - Repository source directory to publish from.
    * @param ref - Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
@@ -396,7 +389,7 @@ export class StaydevopsTs {
    * @param repoOwner - Repository owner (e.g. StaytunedLLP).
    * @param repoName - Repository name (e.g. devops).
    * @param inputBranch - Manual branch input provided for workflow_dispatch.
-  * @param releasePrNumber - Release PR number to finalize after publishing a merged release commit.
+   * @param releasePrNumber - Release PR number to finalize after publishing a merged release commit.
    * @param registryScope - The scope of the npm package (e.g. staytunedllp).
    *
    * @example
@@ -404,6 +397,7 @@ export class StaydevopsTs {
    */
   @func({ cache: "never" })
   async publishPackage(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
     ref: string,
     eventName: string,
