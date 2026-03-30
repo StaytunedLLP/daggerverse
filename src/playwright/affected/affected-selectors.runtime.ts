@@ -1,0 +1,327 @@
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+type WorkspaceDir = string;
+type PackageGraph = Record<WorkspaceDir, WorkspaceDir[]>;
+
+type PackageJson = {
+  name: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  workspaces?: string[];
+};
+
+const selectorMode: string = "__SELECTOR_MODE__";
+const baseRef: string = "__BASE_REF__";
+
+const listOnly = selectorMode === "--list";
+const listTestsAll = selectorMode === "--list-tests-all";
+const shouldExecute = process.env.STAYTUNED_AFFECTED_RUNTIME_EXECUTE === "1";
+
+const statCache = new Map<string, ReturnType<typeof statSync>>();
+
+function safeStat(path: string): ReturnType<typeof statSync> | null {
+  const cached = statCache.get(path);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const stats = statSync(path);
+    statCache.set(path, stats);
+    return stats;
+  } catch {
+    return null;
+  }
+}
+
+function safeExists(path: string): boolean {
+  return safeStat(path) !== null;
+}
+
+function getWorkspaces(): WorkspaceDir[] {
+  const pkgJson = JSON.parse(readFileSync("./package.json", "utf8")) as PackageJson;
+  const patterns = pkgJson.workspaces ?? [];
+  const regexes = patterns.map((pattern) => {
+    const normalizedPattern = pattern
+      .replace(/\./g, "\\.")
+      .replace(/\//g, "\\/")
+      .replace(/\*\*/g, ".*")
+      .replace(/\*/g, "[^/]+");
+    return new RegExp(`^${normalizedPattern}$`);
+  });
+
+  const results: WorkspaceDir[] = [];
+
+  function walk(dir: string): void {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      if (entry.name === "node_modules" || entry.name === ".git") {
+        continue;
+      }
+
+      const path = join(dir, entry.name);
+      const normalized = path.startsWith("./") ? path.slice(2) : path;
+
+      if (regexes.some((regex) => regex.test(normalized))) {
+        if (safeExists(join(path, "package.json"))) {
+          results.push(normalized);
+          continue;
+        }
+      }
+
+      walk(path);
+    }
+  }
+
+  walk(".");
+  return results;
+}
+
+function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
+  const cacheDir = "./.cache";
+  const cachePath = join(cacheDir, "package-graph.json");
+
+  if (safeExists(cachePath)) {
+    try {
+      const cacheMtime = safeStat(cachePath)?.mtimeMs ?? 0;
+      let stale = false;
+
+      for (const directory of workspaceDirs) {
+        const packageJsonPath = join(directory, "package.json");
+        const packageJsonStats = safeStat(packageJsonPath);
+        if (packageJsonStats && packageJsonStats.mtimeMs > cacheMtime) {
+          stale = true;
+          break;
+        }
+      }
+
+      if (!stale) {
+        return JSON.parse(readFileSync(cachePath, "utf8")) as PackageGraph;
+      }
+    } catch {
+      // Fall through to regenerate cache.
+    }
+  }
+
+  const graph: PackageGraph = {};
+  const nameMap: Record<string, WorkspaceDir> = {};
+  const pkgCache: Record<WorkspaceDir, PackageJson> = {};
+
+  for (const directory of workspaceDirs) {
+    const packageJsonPath = join(directory, "package.json");
+    if (!safeExists(packageJsonPath)) {
+      continue;
+    }
+
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as PackageJson;
+    pkgCache[directory] = packageJson;
+    nameMap[packageJson.name] = directory;
+    graph[directory] = [];
+  }
+
+  for (const directory of workspaceDirs) {
+    const packageJson = pkgCache[directory];
+    if (!packageJson) {
+      continue;
+    }
+
+    const dependencies = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies,
+    };
+
+    for (const dependencyName of Object.keys(dependencies)) {
+      const dependencyDirectory = nameMap[dependencyName];
+      if (dependencyDirectory) {
+        graph[directory].push(dependencyDirectory);
+      }
+    }
+  }
+
+  try {
+    if (!existsSync(cacheDir)) {
+      mkdirSync(cacheDir, { recursive: true });
+    }
+    writeFileSync(cachePath, JSON.stringify(graph));
+  } catch {
+    // Ignore cache write failures.
+  }
+
+  return graph;
+}
+
+function getDiff(): string[] {
+  if (process.env.CHANGED_FILES) {
+    return process.env.CHANGED_FILES.split(/[\s,]+/).filter(Boolean);
+  }
+
+  const commands = [
+    "git diff --name-only --diff-filter=ACMRTUXB HEAD~1",
+    'git show --name-only --pretty="format:" HEAD',
+    `git diff --name-only --diff-filter=ACMRTUXB ${baseRef}...HEAD`,
+    "git diff --name-only --diff-filter=ACMRTUXB origin/master...HEAD",
+  ];
+
+  for (const command of commands) {
+    try {
+      const out = execSync(command, {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf-8",
+      }).trim();
+
+      if (out.length > 0) {
+        return out.split("\n");
+      }
+    } catch {
+      if (command.includes(baseRef)) {
+        try {
+          execSync(`git fetch origin ${baseRef.replace("origin/", "")} --depth=1`, {
+            stdio: "ignore",
+          });
+        } catch {
+          // Ignore fetch failures and continue fallback commands.
+        }
+      }
+    }
+  }
+
+  return [];
+}
+
+const ignoredExtensions = new Set([
+  ".md",
+  ".txt",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".yml",
+  ".yaml",
+]);
+
+function isSourceFile(file: string): boolean {
+  for (const extension of ignoredExtensions) {
+    if (file.endsWith(extension)) {
+      return false;
+    }
+  }
+
+  return !(file.includes("/docs/") || file.startsWith("docs/"));
+}
+
+function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): WorkspaceDir[] {
+  const changed = new Set<WorkspaceDir>();
+
+  for (const file of files) {
+    if (!isSourceFile(file)) {
+      continue;
+    }
+
+    for (const directory of workspaceDirs) {
+      if (file.startsWith(`${directory}/`)) {
+        changed.add(directory);
+        break;
+      }
+    }
+  }
+
+  return Array.from(changed);
+}
+
+function getReverseGraph(graph: PackageGraph): PackageGraph {
+  const reverse: PackageGraph = {};
+  for (const packageName of Object.keys(graph)) {
+    reverse[packageName] = [];
+  }
+
+  for (const packageName of Object.keys(graph)) {
+    for (const dependency of graph[packageName]) {
+      reverse[dependency].push(packageName);
+    }
+  }
+
+  return reverse;
+}
+
+function affectedPackages(
+  changed: WorkspaceDir[],
+  allFiles: string[],
+  packageNames: WorkspaceDir[],
+  reverseGraph: PackageGraph,
+): WorkspaceDir[] {
+  if (changed.length === 0) {
+    const infrastructureChanged = allFiles.some(
+      (file) =>
+        file.includes("tools/scripts/") ||
+        file.endsWith("package.json") ||
+        file.endsWith("tsconfig.json") ||
+        file.endsWith("yarn.lock") ||
+        file.endsWith("package-lock.json") ||
+        file.endsWith("playwright.config.ts"),
+    );
+
+    return infrastructureChanged ? packageNames : [];
+  }
+
+  const seen = new Set(changed);
+  const queue = [...changed];
+
+  let index = 0;
+  while (index < queue.length) {
+    const current = queue[index++];
+    const dependencies = reverseGraph[current];
+    if (!dependencies) {
+      continue;
+    }
+
+    for (const dependency of dependencies) {
+      if (!seen.has(dependency)) {
+        seen.add(dependency);
+        queue.push(dependency);
+      }
+    }
+  }
+
+  return packageNames.filter((packageName) => seen.has(packageName));
+}
+
+function run(): void {
+  try {
+    const workspaceDirs = getWorkspaces();
+    const graph = getPackageGraph(workspaceDirs);
+    const packageNames = Object.keys(graph);
+    const reverseGraph = getReverseGraph(graph);
+
+    const files = getDiff();
+    const changed = changedPackages(files, workspaceDirs);
+    const affected = listTestsAll ? packageNames : affectedPackages(changed, files, packageNames, reverseGraph);
+
+    if (listOnly) {
+      console.log(affected.join(","));
+      return;
+    }
+
+    const tests: string[] = [];
+    for (const packageName of affected) {
+      const testsPath = join(packageName, "tests");
+      if (safeExists(testsPath)) {
+        tests.push(testsPath);
+      }
+    }
+
+    console.log(tests.join(" "));
+  } catch (error) {
+    console.error("❌ Runtime Error:");
+    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
+    process.exit(1);
+  }
+}
+
+if (shouldExecute) {
+  run();
+}

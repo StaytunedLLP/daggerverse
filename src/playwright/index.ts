@@ -9,6 +9,10 @@ import {
   withPlaywrightSystemDeps,
 } from "../shared/index.js";
 import { normalizePaths } from "../shared/path-utils.js";
+import {
+  buildInternalSelectorProgram,
+  listTestsSelectorMode,
+} from "./affected/affected-tests.js";
 import type { PlaywrightTestOptions } from "./types.js";
 
 function normalizeBrowsers(browsers?: string): string[] {
@@ -49,15 +53,39 @@ export async function runPlaywrightTests(
 
   container = withFullSource(container, source, { strategy: "overlay" });
 
+  let affectedSelector = "";
+  if (options.runAffected ?? false) {
+    const program = buildInternalSelectorProgram(
+      options.base ?? "origin/main",
+      listTestsSelectorMode,
+    );
+    const runContainer = container
+      .withEnvVariable("STAYTUNED_AFFECTED_RUNTIME_EXECUTE", "1")
+      .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
+      .withNewFile("/tmp/affected-selector.mjs", program)
+      .withExec(["node", "/tmp/affected-selector.mjs"]);
+    affectedSelector = (await runContainer.stdout()).trim();
+
+    if (options.listOnly ?? false) {
+      return affectedSelector;
+    }
+
+    if (affectedSelector.length === 0) {
+      return "No affected tests detected";
+    }
+  }
+
   if (options.runBuild ?? true) {
     container = runNpmScript(container, "build", {
       cwd: packagePath,
     });
   }
 
+  const selector = options.runAffected ? affectedSelector : options.testSelector;
+  const args = selector ? selector.split(/\s+/).filter((value) => value.length > 0) : [];
   container = runNpmScript(container, options.testScript ?? "test:e2e", {
     cwd: packagePath,
-    args: options.testSelector ? [options.testSelector] : [],
+    args,
   });
 
   return container.stdout();

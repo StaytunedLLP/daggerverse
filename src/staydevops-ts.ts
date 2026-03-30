@@ -161,6 +161,10 @@ export class Checks {
    * @param runBuild - When true, runs `npm run build` before executing tests.
    * @param registryScope - GitHub Packages scope used when authenticating npm.
    * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
+   * @param runAffected - When true, resolves affected tests from git diff and runs only those selectors.
+   * @param base - Base ref used by affected discovery when `runAffected` is enabled.
+   * @param listOnly - When true with `runAffected`, returns discovered selectors without running build/tests.
+   * @param changedFiles - Optional whitespace/comma-separated file list used instead of git diff in affected discovery.
    *
    * @example
    * dagger call checks test-playwright --source . --package-paths "apps/web"
@@ -179,6 +183,10 @@ export class Checks {
     runBuild = true,
     registryScope = "staytunedllp",
     browsers = "chromium",
+    runAffected = false,
+    base = "origin/main",
+    listOnly = false,
+    changedFiles = "",
   ): Promise<string> {
     // Verify chromium-bidi using the private helper
     await this.verifyChromiumBidi(source, nodeAuthToken, packagePaths);
@@ -191,6 +199,10 @@ export class Checks {
       runBuild,
       registryScope,
       browsers,
+      runAffected,
+      base,
+      listOnly,
+      changedFiles,
     });
   }
 
