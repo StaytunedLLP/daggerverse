@@ -1,4 +1,4 @@
-import { dag } from "@dagger.io/dagger";
+import { File, dag } from "@dagger.io/dagger";
 
 const ALLOWED_PREFIXES = [
   "feat",
@@ -44,17 +44,31 @@ export function validatePrTitle(title: string): void {
 /**
  * Reads the PR title from the GitHub event file and validates it.
  * This is intended to be used in GitHub Actions.
+ *
+ * @param eventFile - Optional Dagger File containing the GitHub event JSON.
  */
-export async function checkPrTitleFromEvent(): Promise<void> {
-  const eventPath = process.env.GITHUB_EVENT_PATH;
+export async function checkPrTitleFromEvent(eventFile?: File): Promise<void> {
+  let content: string;
 
-  if (!eventPath) {
-    console.warn("GITHUB_EVENT_PATH not set, skipping PR title check.");
-    return;
+  if (eventFile) {
+    content = await eventFile.contents();
+  } else {
+    const eventPath = process.env.GITHUB_EVENT_PATH;
+
+    if (!eventPath) {
+      console.warn("GITHUB_EVENT_PATH not set, skipping PR title check.");
+      return;
+    }
+
+    try {
+      content = await dag.host().file(eventPath).contents();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read event file from host: ${errorMessage}`);
+    }
   }
 
   try {
-    const content = await dag.host().file(eventPath).contents();
     const event = JSON.parse(content);
     const title = event.pull_request?.title;
 

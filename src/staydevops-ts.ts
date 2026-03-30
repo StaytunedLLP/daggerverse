@@ -1,5 +1,6 @@
 import {
   Directory,
+  File,
   Secret,
   argument,
   check,
@@ -175,13 +176,15 @@ export class StaydevopsTs {
   /**
    * Validates the PR title according to Conventional Commits naming convention.
    *
+   * @param eventFile - Optional GitHub event JSON file containing the PR title.
+   *
    * @example
-   * dagger call check-pr-title
+   * dagger call check-pr-title --event-file=$GITHUB_EVENT_PATH
    */
   @check()
   @func()
-  async checkPrTitle(): Promise<void> {
-    await checkPrTitleFromEvent();
+  async checkPrTitle(eventFile?: File): Promise<void> {
+    await checkPrTitleFromEvent(eventFile);
   }
 
   /**
