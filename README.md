@@ -11,21 +11,23 @@ This repo is published to Daggerverse as the `staydevops-ts` module and exposes 
 
 ## Module API
 
-Checks:
+### Checks (`checks()`)
 
+A collection of repository validation tools:
+
+- `install`: installs dependencies and can optionally install Playwright browsers and Firebase tooling
 - `format`: runs `npm run format:check`
 - `lint`: runs `npm run lint`
 - `build`: runs `npm run build`
 - `test`: runs `npm run test`
+- `test-playwright`: installs dependencies, provisions Playwright browsers, optionally runs build, and executes E2E tests
 
-Functions:
+### Functions
 
-- `prepare-node-workspace`: installs dependencies and can optionally install Playwright browsers and Firebase tooling
-- `playwright-test`: installs dependencies, provisions Playwright browsers, optionally runs build, and executes E2E tests
-- `verify-chromium-bidi`: validates that `chromium-bidi` is installed in the selected package path
-- `deploy-webhosting`: installs, builds, and deploys a Firebase Hosting project
-- `deployApphosting`: creates or updates a Firebase App Hosting backend and returns its service URL
-- `deleteBackend`: deletes a Firebase App Hosting backend
+- `git-diff`: retrieves changed files based on mode (`staged`, `previous`, `between`)
+- `fb-apphosting`: performs actions (`deploy`, `delete`) on Firebase App Hosting backends
+- `fb-webhosting`: installs, builds, and deploys a Firebase web hosting project
+- `publish-package`: publishes npm packages and creates GitHub releases
 
 ## Usage
 
@@ -38,13 +40,13 @@ dagger functions -m github.com/StaytunedLLP/daggerverse
 Run a check against the current repository:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse format --source=.
+dagger call -m github.com/StaytunedLLP/daggerverse checks format --source=.
 ```
 
 Warm a workspace with Playwright installed:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse prepare-node-workspace \
+dagger call -m github.com/StaytunedLLP/daggerverse checks install \
   --source=. \
   --playwright-install=true
 ```
@@ -52,7 +54,7 @@ dagger call -m github.com/StaytunedLLP/daggerverse prepare-node-workspace \
 Prepare a repository that uses private `@staytunedllp/*` packages:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse prepare-node-workspace \
+dagger call -m github.com/StaytunedLLP/daggerverse checks install \
   --source=. \
   --node-auth-token=env:NODE_AUTH_TOKEN
 ```
@@ -60,24 +62,26 @@ dagger call -m github.com/StaytunedLLP/daggerverse prepare-node-workspace \
 Run Playwright E2E tests:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse playwright-test \
+dagger call -m github.com/StaytunedLLP/daggerverse checks test-playwright \
   --source=. \
   --package-paths=apps/web \
   --test-script=test:e2e
 ```
 
-Optional selector/path forwarding example:
+Deploy Firebase App Hosting:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse playwright-test \
-  --source=. \
-  --test-selector=tests/smoke/login.spec.ts
+dagger call -m github.com/StaytunedLLP/daggerverse fb-apphosting \
+  --action deploy \
+  --source . \
+  --project-id=<firebase-project-id> \
+  --backend-id=<backend-id>
 ```
 
-Deploy Firebase Hosting:
+Deploy Firebase Web Hosting:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse deploy-webhosting \
+dagger call -m github.com/StaytunedLLP/daggerverse fb-webhosting \
   --source=. \
   --project-id=<firebase-project-id> \
   --gcp-credentials=env:GCP_CREDENTIALS
@@ -97,7 +101,7 @@ If the repository uses only public npm packages, you can omit the token entirely
 
 ## Playwright and npm caching behavior
 
-The `playwright-test` flow enables both npm and Playwright browser cache mounts by default.
+The `test-playwright` flow enables both npm and Playwright browser cache mounts by default.
 
 - npm cache path: `/root/.npm`
 - Playwright browser cache path: `/root/.cache/ms-playwright`
@@ -126,3 +130,7 @@ This repository also exports plain TypeScript helpers for internal reuse:
 - `prepareNodeWorkspace`
 - `runPlaywrightTests`
 - `firebaseDeployWebhostingPipeline`
+- `gitDiffStaged`
+- `gitDiffPrevious`
+- `gitDiffBetweenCommits`
+- `publishPackage`
