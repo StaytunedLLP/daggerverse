@@ -1,0 +1,239 @@
+name: 🔥 Sync Remote Config
+
+on:
+  workflow_run:
+    workflows: ["🔄 Planning Lifecycle Sync"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no actual changes)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  # Build and test TypeScript (runs first)
+  build:
+    name: Build & Test TypeScript
+    runs-on: st-arc
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install Dependencies
+        working-directory: .github/sync-issues
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: .github/sync-issues
+        run: |
+          echo "🔨 Compiling TypeScript with tsgo..."
+          npm run build
+
+      - name: Run Tests
+        working-directory: .github/sync-issues
+        run: |
+          echo "🧪 Running tests..."
+          node --test dist/tests/*.test.js
+
+      - name: Verify Syntax & Validate Docs
+        working-directory: .github/sync-issues
+        run: |
+          echo "✅ Validing documentation structure..."
+          node dist/src/validate-docs.js
+          echo "✅ Verifying compiled scripts..."
+          node --check dist/src/sync-remote-config.js
+          node --check dist/src/anchor-flag-keys.js
+          node --check dist/src/generate-local-config.js
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: .github/sync-issues/dist/
+          retention-days: 1
+  sync-dev:
+    name: Sync to Dev (ecom-test)
+    runs-on: st-arc
+    needs: build
+    environment: dev-ecom-test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .github/sync-issues/dist/
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.FIREBASE_PROJECT_ID }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Sync Remote Config Flags
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          TARGET_ENV: dev-ecom-test
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          node .github/sync-issues/dist/src/sync-remote-config.js --env=dev-ecom-test ${{ inputs.dry_run == true && '--dry-run' || '' }}
+  sync-stg:
+    name: Sync to Staging (ecom-test)
+    runs-on: st-arc
+    needs: sync-dev
+    environment: stg-ecom-test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .github/sync-issues/dist/
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.FIREBASE_PROJECT_ID }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Sync Remote Config Flags
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          TARGET_ENV: stg-ecom-test
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          node .github/sync-issues/dist/src/sync-remote-config.js --env=stg-ecom-test ${{ inputs.dry_run == true && '--dry-run' || '' }}
+
+  sync-prod:
+    # (Identical to sync-dev but with prod env)
+    name: Sync to Production (ecom-test)
+    runs-on: st-arc
+    needs: sync-stg
+    environment: prod-ecom-test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .github/sync-issues/dist/
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.FIREBASE_PROJECT_ID }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Sync Remote Config Flags
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          TARGET_ENV: prod-ecom-test
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          node .github/sync-issues/dist/src/sync-remote-config.js --env=prod-ecom-test ${{ inputs.dry_run == true && '--dry-run' || '' }}
+
+  anchor-docs:
+    name: Anchor Flag Keys & Generate Artifacts
+    runs-on: st-arc
+    needs: sync-prod
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .github/sync-issues/dist/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Anchor Flag Keys & Generate Artifacts
+        run: |
+          echo "⚓ Anchoring keys..."
+          node .github/sync-issues/dist/src/anchor-flag-keys.js
+          echo "🏗️ Generating Local Config artifacts..."
+          node .github/sync-issues/dist/src/generate-local-config.js
+
+      - name: Create PR if changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          BRANCH="docs/sync-update-$(date +%Y%m%d%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add docs/ remote-config/
+          git commit -m "docs: sync flag keys and update local constants"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "docs: sync flag keys and update local constants" \
+            --body "This PR anchors the generated flag keys back to the feature documentation and updates the local TypeScript constants and JSON defaults.
+
+          **Changes:**
+          - Updated \`flag_key\` in feature docs
+          - Generated \`remote-config/generated/\` artifacts (JSON and TS)
+          - Ensured developers have type-safe constants for flag keys
+
+          _Auto-generated by Remote Config Sync workflow_" \
+            --base main \
+            --head "$BRANCH"
