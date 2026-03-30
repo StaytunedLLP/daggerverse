@@ -162,10 +162,18 @@ export async function deleteFirebaseApphostingBackend(
   projectId: string,
   backendId: string,
   gcpCredentials?: Secret,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
+  wifAudience = "",
 ): Promise<string> {
   const container = withAppHostingAuth(
     firebaseAppHostingBase(),
     gcpCredentials,
+    wifProvider,
+    wifServiceAccount,
+    wifOidcToken,
+    wifAudience,
   );
 
   return container

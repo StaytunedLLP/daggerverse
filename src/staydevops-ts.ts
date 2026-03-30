@@ -269,8 +269,10 @@ export class StaydevopsTs {
           throw new Error("commitRange is required for 'between' mode");
         }
         return gitDiffBetweenCommits(source, commitRange);
-      default:
-        throw new Error(`Unsupported mode: ${mode}`);
+      default: {
+        const _exhaustiveCheck: never = mode;
+        throw new Error("Unsupported git diff mode");
+      }
     }
   }
 
@@ -336,10 +338,15 @@ export class StaydevopsTs {
         projectId,
         backendId,
         gcpCredentials,
+        wifProvider,
+        wifServiceAccount,
+        wifOidcToken,
+        wifAudience,
       );
     }
 
-    throw new Error(`Unsupported action: ${action}`);
+    const _exhaustiveCheck: never = action;
+    throw new Error("Unsupported action");
   }
 
   /**
