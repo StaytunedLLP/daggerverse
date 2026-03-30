@@ -19,6 +19,14 @@ const listOnly = selectorMode === "--list";
 const listTestsAll = selectorMode === "--list-tests-all";
 const shouldExecute = process.env.STAYTUNED_AFFECTED_RUNTIME_EXECUTE === "1";
 
+function assertSafeBaseRef(ref: string): string {
+  if (!/^[A-Za-z0-9._/-]+$/.test(ref)) {
+    throw new Error(`Invalid base ref '${ref}' for affected selector discovery.`);
+  }
+
+  return ref;
+}
+
 const statCache = new Map<string, ReturnType<typeof statSync>>();
 
 function safeStat(path: string): ReturnType<typeof statSync> | null {
@@ -40,17 +48,40 @@ function safeExists(path: string): boolean {
   return safeStat(path) !== null;
 }
 
+function globToRegex(pattern: string): RegExp {
+  let regex = "^";
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    const nextCharacter = pattern[index + 1];
+
+    if (character === "*" && nextCharacter === "*") {
+      regex += ".*";
+      index += 1;
+      continue;
+    }
+
+    if (character === "*") {
+      regex += "[^/]+";
+      continue;
+    }
+
+    if (/[\\^$.*+?()[\]{}|/]/.test(character)) {
+      regex += `\\${character}`;
+      continue;
+    }
+
+    regex += character;
+  }
+
+  regex += "$";
+  return new RegExp(regex);
+}
+
 function getWorkspaces(): WorkspaceDir[] {
   const pkgJson = JSON.parse(readFileSync("./package.json", "utf8")) as PackageJson;
   const patterns = pkgJson.workspaces ?? [];
-  const regexes = patterns.map((pattern) => {
-    const normalizedPattern = pattern
-      .replace(/\./g, "\\.")
-      .replace(/\//g, "\\/")
-      .replace(/\*\*/g, ".*")
-      .replace(/\*/g, "[^/]+");
-    return new RegExp(`^${normalizedPattern}$`);
-  });
+  const regexes = patterns.map(globToRegex);
 
   const results: WorkspaceDir[] = [];
 
@@ -155,15 +186,16 @@ function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
 }
 
 function getDiff(): string[] {
+  const safeBaseRef = assertSafeBaseRef(baseRef);
+
   if (process.env.CHANGED_FILES) {
     return process.env.CHANGED_FILES.split(/[\s,]+/).filter(Boolean);
   }
 
   const commands = [
+    `git diff --name-only --diff-filter=ACMRTUXB ${safeBaseRef}...HEAD`,
     "git diff --name-only --diff-filter=ACMRTUXB HEAD~1",
     'git show --name-only --pretty="format:" HEAD',
-    `git diff --name-only --diff-filter=ACMRTUXB ${baseRef}...HEAD`,
-    "git diff --name-only --diff-filter=ACMRTUXB origin/master...HEAD",
   ];
 
   for (const command of commands) {
@@ -177,9 +209,11 @@ function getDiff(): string[] {
         return out.split("\n");
       }
     } catch {
-      if (command.includes(baseRef)) {
+      if (command.includes(safeBaseRef)) {
         try {
-          execSync(`git fetch origin ${baseRef.replace("origin/", "")} --depth=1`, {
+          const fetchRef =
+            safeBaseRef.startsWith("origin/") ? safeBaseRef.slice("origin/".length) : safeBaseRef;
+          execSync(`git fetch origin ${fetchRef} --depth=1`, {
             stdio: "ignore",
           });
         } catch {

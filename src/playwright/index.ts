@@ -81,8 +81,14 @@ export async function runPlaywrightTests(
     });
   }
 
-  const selector = options.runAffected ? affectedSelector : options.testSelector;
-  const args = selector ? selector.split(/\s+/).filter((value) => value.length > 0) : [];
+  let args: string[] = [];
+  if (options.runAffected) {
+    if (affectedSelector) {
+      args = affectedSelector.split(/\s+/).filter((value) => value.length > 0);
+    }
+  } else if (options.testSelector) {
+    args = [options.testSelector];
+  }
   container = runNpmScript(container, options.testScript ?? "test:e2e", {
     cwd: packagePath,
     args,
