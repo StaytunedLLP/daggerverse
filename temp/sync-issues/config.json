@@ -1,0 +1,50 @@
+{
+  "environments": {
+    "dev-karmodharmo-com": {
+      "id": "dev-karmodharmo-com",
+      "projectId": "dev-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "dev-admin-karmodharmo-com": {
+      "id": "dev-admin-karmodharmo-com",
+      "projectId": "dev-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "dev-partner-karmodharmo-com": {
+      "id": "dev-partner-karmodharmo-com",
+      "projectId": "dev-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "stg-karmodharmo-com": {
+      "id": "stg-karmodharmo-com",
+      "projectId": "stg-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "stg-admin-karmodharmo-com": {
+      "id": "stg-admin-karmodharmo-com",
+      "projectId": "stg-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "stg-partner-karmodharmo-com": {
+      "id": "stg-partner-karmodharmo-com",
+      "projectId": "stg-karmodharmo-com-010126",
+      "isProduction": false
+    },
+    "prod-karmodharmo-com": {
+      "id": "prod-karmodharmo-com",
+      "projectId": "prod-karmodharmo-com-010126",
+      "isProduction": true
+    },
+    "prod-admin-karmodharmo-com": {
+      "id": "prod-admin-karmodharmo-com",
+      "projectId": "prod-karmodharmo-com-010126",
+      "isProduction": true
+    },
+    "prod-partner-karmodharmo-com": {
+      "id": "prod-partner-karmodharmo-com",
+      "projectId": "prod-karmodharmo-com-010126",
+      "isProduction": true
+    }
+  },
+  "_comment": "Firebase Remote Config mapping: 9 GitHub environments map to 3 actual Firebase projects."
+}
