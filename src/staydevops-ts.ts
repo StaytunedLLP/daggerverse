@@ -150,6 +150,32 @@ export class Checks {
     await this.runDefaultCheck(source, "test");
   }
 
+
+}
+
+/**
+ * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
+ */
+@object()
+export class StaydevopsTs {
+  /**
+   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
+   */
+  private base(): Container {
+    return firebaseAppHostingBase();
+  }
+
+  /**
+   * Returns the collection of repository checks.
+   *
+   * @example
+   * dagger call checks lint --source .
+   */
+  @func()
+  checks(): Checks {
+    return new Checks();
+  }
+
   /**
    * Run Playwright E2E tests for a package inside the provided source tree.
    *
@@ -167,7 +193,7 @@ export class Checks {
    * @param changedFiles - Optional whitespace/comma-separated file list used instead of git diff in affected discovery.
    *
    * @example
-   * dagger call checks test-playwright --source . --package-paths "apps/web"
+   * dagger call test-playwright --source . --package-paths "apps/web"
    */
   @func()
   async testPlaywright(
@@ -222,30 +248,6 @@ export class Checks {
       packagePaths,
       verifyChromiumBidi: true,
     });
-  }
-}
-
-/**
- * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
- */
-@object()
-export class StaydevopsTs {
-  /**
-   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
-   */
-  private base(): Container {
-    return firebaseAppHostingBase();
-  }
-
-  /**
-   * Returns the collection of repository checks.
-   *
-   * @example
-   * dagger call checks lint --source .
-   */
-  @func()
-  checks(): Checks {
-    return new Checks();
   }
 
   /**
