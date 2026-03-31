@@ -268,7 +268,7 @@ export class StaydevopsTs {
   async gitDiff(
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
-    mode: "staged" | "previous" | "between" = "staged",
+    mode: string = "staged",
     commitRange = "",
   ): Promise<string[]> {
     switch (mode) {
@@ -282,7 +282,6 @@ export class StaydevopsTs {
         }
         return gitDiffBetweenCommits(source, commitRange);
       default: {
-        const _exhaustiveCheck: never = mode;
         throw new Error("Unsupported git diff mode");
       }
     }
@@ -312,7 +311,7 @@ export class StaydevopsTs {
    */
   @func()
   async fbApphosting(
-    action: "deploy" | "delete",
+    action: string,
     projectId: string,
     backendId: string,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
@@ -357,7 +356,6 @@ export class StaydevopsTs {
       );
     }
 
-    const _exhaustiveCheck: never = action;
     throw new Error("Unsupported action");
   }
 
