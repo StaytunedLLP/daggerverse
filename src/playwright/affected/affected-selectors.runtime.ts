@@ -2,24 +2,14 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-type WorkspaceDir = string;
-type PackageGraph = Record<WorkspaceDir, WorkspaceDir[]>;
-
-type PackageJson = {
-  name: string;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  workspaces?: string[];
-};
-
-const selectorMode: string = "__SELECTOR_MODE__";
-const baseRef: string = "__BASE_REF__";
+const selectorMode = "__SELECTOR_MODE__";
+const baseRef = "__BASE_REF__";
 
 const listOnly = selectorMode === "--list";
 const listTestsAll = selectorMode === "--list-tests-all";
 const shouldExecute = process.env.STAYTUNED_AFFECTED_RUNTIME_EXECUTE === "1";
 
-function assertSafeBaseRef(ref: string): string {
+function assertSafeBaseRef(ref) {
   if (!/^[A-Za-z0-9._/-]+$/.test(ref)) {
     throw new Error(`Invalid base ref '${ref}' for affected selector discovery.`);
   }
@@ -27,9 +17,9 @@ function assertSafeBaseRef(ref: string): string {
   return ref;
 }
 
-const statCache = new Map<string, ReturnType<typeof statSync>>();
+const statCache = new Map();
 
-function safeStat(path: string): ReturnType<typeof statSync> | null {
+function safeStat(path) {
   const cached = statCache.get(path);
   if (cached) {
     return cached;
@@ -44,11 +34,11 @@ function safeStat(path: string): ReturnType<typeof statSync> | null {
   }
 }
 
-function safeExists(path: string): boolean {
+function safeExists(path) {
   return safeStat(path) !== null;
 }
 
-function globToRegex(pattern: string): RegExp {
+function globToRegex(pattern) {
   let regex = "^";
 
   for (let index = 0; index < pattern.length; index += 1) {
@@ -78,14 +68,14 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(regex);
 }
 
-function getWorkspaces(): WorkspaceDir[] {
-  const pkgJson = JSON.parse(readFileSync("./package.json", "utf8")) as PackageJson;
+function getWorkspaces() {
+  const pkgJson = JSON.parse(readFileSync("./package.json", "utf8"));
   const patterns = pkgJson.workspaces ?? [];
   const regexes = patterns.map(globToRegex);
 
-  const results: WorkspaceDir[] = [];
+  const results = [];
 
-  function walk(dir: string): void {
+  function walk(dir) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
@@ -112,7 +102,7 @@ function getWorkspaces(): WorkspaceDir[] {
   return results;
 }
 
-function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
+function getPackageGraph(workspaceDirs) {
   const cacheDir = "./.cache";
   const cachePath = join(cacheDir, "package-graph.json");
 
@@ -131,16 +121,16 @@ function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
       }
 
       if (!stale) {
-        return JSON.parse(readFileSync(cachePath, "utf8")) as PackageGraph;
+        return JSON.parse(readFileSync(cachePath, "utf8"));
       }
     } catch {
       // Fall through to regenerate cache.
     }
   }
 
-  const graph: PackageGraph = {};
-  const nameMap: Record<string, WorkspaceDir> = {};
-  const pkgCache: Record<WorkspaceDir, PackageJson> = {};
+  const graph = {};
+  const nameMap = {};
+  const pkgCache = {};
 
   for (const directory of workspaceDirs) {
     const packageJsonPath = join(directory, "package.json");
@@ -148,7 +138,7 @@ function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
       continue;
     }
 
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as PackageJson;
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
     pkgCache[directory] = packageJson;
     nameMap[packageJson.name] = directory;
     graph[directory] = [];
@@ -185,7 +175,7 @@ function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
   return graph;
 }
 
-function getDiff(): string[] {
+function getDiff() {
   const safeBaseRef = assertSafeBaseRef(baseRef);
 
   if (process.env.CHANGED_FILES) {
@@ -238,7 +228,7 @@ const ignoredExtensions = new Set([
   ".yaml",
 ]);
 
-function isSourceFile(file: string): boolean {
+function isSourceFile(file) {
   for (const extension of ignoredExtensions) {
     if (file.endsWith(extension)) {
       return false;
@@ -248,8 +238,8 @@ function isSourceFile(file: string): boolean {
   return !(file.includes("/docs/") || file.startsWith("docs/"));
 }
 
-function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): WorkspaceDir[] {
-  const changed = new Set<WorkspaceDir>();
+function changedPackages(files, workspaceDirs) {
+  const changed = new Set();
 
   for (const file of files) {
     if (!isSourceFile(file)) {
@@ -267,8 +257,8 @@ function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): Worksp
   return Array.from(changed);
 }
 
-function getReverseGraph(graph: PackageGraph): PackageGraph {
-  const reverse: PackageGraph = {};
+function getReverseGraph(graph) {
+  const reverse = {};
   for (const packageName of Object.keys(graph)) {
     reverse[packageName] = [];
   }
@@ -283,11 +273,11 @@ function getReverseGraph(graph: PackageGraph): PackageGraph {
 }
 
 function affectedPackages(
-  changed: WorkspaceDir[],
-  allFiles: string[],
-  packageNames: WorkspaceDir[],
-  reverseGraph: PackageGraph,
-): WorkspaceDir[] {
+  changed,
+  allFiles,
+  packageNames,
+  reverseGraph
+) {
   if (changed.length === 0) {
     const infrastructureChanged = allFiles.some(
       (file) =>
@@ -324,7 +314,7 @@ function affectedPackages(
   return packageNames.filter((packageName) => seen.has(packageName));
 }
 
-function run(): void {
+function run() {
   try {
     const workspaceDirs = getWorkspaces();
     const graph = getPackageGraph(workspaceDirs);
@@ -340,7 +330,7 @@ function run(): void {
       return;
     }
 
-    const tests: string[] = [];
+    const tests = [];
     for (const packageName of affected) {
       const testsPath = join(packageName, "tests");
       if (safeExists(testsPath)) {
