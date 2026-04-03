@@ -2,14 +2,24 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const selectorMode = "__SELECTOR_MODE__";
-const baseRef = "__BASE_REF__";
+type WorkspaceDir = string;
+type PackageGraph = Record<WorkspaceDir, WorkspaceDir[]>;
+
+type PackageJson = {
+  name: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  workspaces?: string[];
+};
+
+const selectorMode: string = "__SELECTOR_MODE__";
+const baseRef: string = "__BASE_REF__";
 
 const listOnly = selectorMode === "--list";
 const listTestsAll = selectorMode === "--list-tests-all";
 const shouldExecute = process.env.STAYTUNED_AFFECTED_RUNTIME_EXECUTE === "1";
 
-function assertSafeBaseRef(ref) {
+function assertSafeBaseRef(ref: string): string {
   if (!/^[A-Za-z0-9._/-]+$/.test(ref)) {
     throw new Error(`Invalid base ref '${ref}' for affected selector discovery.`);
   }
@@ -17,9 +27,9 @@ function assertSafeBaseRef(ref) {
   return ref;
 }
 
-const statCache = new Map();
+const statCache = new Map<string, ReturnType<typeof statSync>>();
 
-function safeStat(path) {
+function safeStat(path: string): ReturnType<typeof statSync> | null {
   const cached = statCache.get(path);
   if (cached) {
     return cached;
@@ -34,11 +44,11 @@ function safeStat(path) {
   }
 }
 
-function safeExists(path) {
+function safeExists(path: string): boolean {
   return safeStat(path) !== null;
 }
 
-function globToRegex(pattern) {
+function globToRegex(pattern: string): RegExp {
   let regex = "^";
 
   for (let index = 0; index < pattern.length; index += 1) {
@@ -68,14 +78,14 @@ function globToRegex(pattern) {
   return new RegExp(regex);
 }
 
-function getWorkspaces() {
-  const pkgJson = JSON.parse(readFileSync("./package.json", "utf8"));
+function getWorkspaces(): WorkspaceDir[] {
+  const pkgJson = JSON.parse(readFileSync("./package.json", "utf8")) as PackageJson;
   const patterns = pkgJson.workspaces ?? [];
   const regexes = patterns.map(globToRegex);
 
-  const results = [];
+  const results: WorkspaceDir[] = [];
 
-  function walk(dir) {
+  function walk(dir: string): void {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) {
         continue;
@@ -102,7 +112,7 @@ function getWorkspaces() {
   return results;
 }
 
-function getPackageGraph(workspaceDirs) {
+function getPackageGraph(workspaceDirs: WorkspaceDir[]): PackageGraph {
   const cacheDir = "./.cache";
   const cachePath = join(cacheDir, "package-graph.json");
 
@@ -121,16 +131,16 @@ function getPackageGraph(workspaceDirs) {
       }
 
       if (!stale) {
-        return JSON.parse(readFileSync(cachePath, "utf8"));
+        return JSON.parse(readFileSync(cachePath, "utf8")) as PackageGraph;
       }
     } catch {
       // Fall through to regenerate cache.
     }
   }
 
-  const graph = {};
-  const nameMap = {};
-  const pkgCache = {};
+  const graph: PackageGraph = {};
+  const nameMap: Record<string, WorkspaceDir> = {};
+  const pkgCache: Record<WorkspaceDir, PackageJson> = {};
 
   for (const directory of workspaceDirs) {
     const packageJsonPath = join(directory, "package.json");
@@ -138,7 +148,7 @@ function getPackageGraph(workspaceDirs) {
       continue;
     }
 
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as PackageJson;
     pkgCache[directory] = packageJson;
     nameMap[packageJson.name] = directory;
     graph[directory] = [];
@@ -175,7 +185,7 @@ function getPackageGraph(workspaceDirs) {
   return graph;
 }
 
-function getDiff() {
+function getDiff(): string[] {
   const safeBaseRef = assertSafeBaseRef(baseRef);
 
   if (process.env.CHANGED_FILES) {
@@ -228,7 +238,7 @@ const ignoredExtensions = new Set([
   ".yaml",
 ]);
 
-function isSourceFile(file) {
+function isSourceFile(file: string): boolean {
   for (const extension of ignoredExtensions) {
     if (file.endsWith(extension)) {
       return false;
@@ -238,8 +248,8 @@ function isSourceFile(file) {
   return !(file.includes("/docs/") || file.startsWith("docs/"));
 }
 
-function changedPackages(files, workspaceDirs) {
-  const changed = new Set();
+function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): WorkspaceDir[] {
+  const changed = new Set<WorkspaceDir>();
 
   for (const file of files) {
     if (!isSourceFile(file)) {
@@ -257,8 +267,8 @@ function changedPackages(files, workspaceDirs) {
   return Array.from(changed);
 }
 
-function getReverseGraph(graph) {
-  const reverse = {};
+function getReverseGraph(graph: PackageGraph): PackageGraph {
+  const reverse: PackageGraph = {};
   for (const packageName of Object.keys(graph)) {
     reverse[packageName] = [];
   }
@@ -273,11 +283,11 @@ function getReverseGraph(graph) {
 }
 
 function affectedPackages(
-  changed,
-  allFiles,
-  packageNames,
-  reverseGraph
-) {
+  changed: WorkspaceDir[],
+  allFiles: string[],
+  packageNames: WorkspaceDir[],
+  reverseGraph: PackageGraph,
+): WorkspaceDir[] {
   if (changed.length === 0) {
     const infrastructureChanged = allFiles.some(
       (file) =>
@@ -314,7 +324,7 @@ function affectedPackages(
   return packageNames.filter((packageName) => seen.has(packageName));
 }
 
-function run() {
+function run(): void {
   try {
     const workspaceDirs = getWorkspaces();
     const graph = getPackageGraph(workspaceDirs);
@@ -330,7 +340,7 @@ function run() {
       return;
     }
 
-    const tests = [];
+    const tests: string[] = [];
     for (const packageName of affected) {
       const testsPath = join(packageName, "tests");
       if (safeExists(testsPath)) {

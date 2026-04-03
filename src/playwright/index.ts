@@ -62,8 +62,8 @@ export async function runPlaywrightTests(
     const runContainer = container
       .withEnvVariable("STAYTUNED_AFFECTED_RUNTIME_EXECUTE", "1")
       .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
-      .withNewFile("/tmp/affected-selector.mjs", program)
-      .withExec(["node", "/tmp/affected-selector.mjs"]);
+      .withNewFile("/tmp/affected-selector.ts", program)
+      .withExec(["node", "--experimental-strip-types", "/tmp/affected-selector.ts"]);
     affectedSelector = (await runContainer.stdout()).trim();
 
     if (options.listOnly ?? false) {
