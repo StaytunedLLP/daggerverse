@@ -8,4 +8,8 @@ export type PlaywrightTestOptions = {
   runBuild?: boolean;
   registryScope?: string;
   browsers?: string;
+  runAffected?: boolean;
+  base?: string;
+  listOnly?: boolean;
+  changedFiles?: string;
 };
