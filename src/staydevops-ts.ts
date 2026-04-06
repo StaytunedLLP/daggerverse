@@ -150,67 +150,7 @@ export class Checks {
     await this.runDefaultCheck(source, "test");
   }
 
-  /**
-   * Run Playwright E2E tests for a package inside the provided source tree.
-   *
-   * @param source - Repository source directory containing Playwright tests.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
-   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for build/test execution.
-   * @param testSelector - Optional selector/path passed to the npm test script using `--`.
-   * @param testScript - Npm script to run for tests. Defaults to `test:e2e`.
-   * @param runBuild - When true, runs `npm run build` before executing tests.
-   * @param registryScope - GitHub Packages scope used when authenticating npm.
-   * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
-   *
-   * @example
-   * dagger call checks test-playwright --source . --package-paths "apps/web"
-   */
-  @func()
-  async testPlaywright(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-    packagePaths = ".",
-    testSelector = "",
-    testScript = "test:e2e",
-    runBuild = true,
-    registryScope = "staytunedllp",
-    browsers = "chromium",
-  ): Promise<string> {
-    // Verify chromium-bidi using the private helper
-    await this.verifyChromiumBidi(source, nodeAuthToken, packagePaths);
 
-    return runPlaywrightTests(source, {
-      nodeAuthToken,
-      packagePaths,
-      testSelector,
-      testScript,
-      runBuild,
-      registryScope,
-      browsers,
-    });
-  }
-
-  /**
-   * Validate that `chromium-bidi` is installed in the selected package path.
-   *
-   * @param source - Repository source directory that contains the package to inspect.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
-   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
-   */
-  private async verifyChromiumBidi(
-    source: Directory,
-    nodeAuthToken?: Secret,
-    packagePaths = ".",
-  ): Promise<string> {
-    return runNodeChecks(source, nodeAuthToken, {
-      packagePaths,
-      verifyChromiumBidi: true,
-    });
-  }
 }
 
 /**
@@ -237,6 +177,80 @@ export class StaydevopsTs {
   }
 
   /**
+   * Run Playwright E2E tests for a package inside the provided source tree.
+   *
+   * @param source - Repository source directory containing Playwright tests.
+   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for build/test execution.
+   * @param testSelector - Optional selector/path passed to the npm test script using `--`.
+   * @param testScript - Npm script to run for tests. Defaults to `test:e2e`.
+   * @param runBuild - When true, runs `npm run build` before executing tests.
+   * @param registryScope - GitHub Packages scope used when authenticating npm.
+   * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
+   * @param runAffected - When true, resolves affected tests from git diff and runs only those selectors.
+   * @param base - Base ref used by affected discovery when `runAffected` is enabled.
+   * @param listOnly - When true with `runAffected`, returns discovered selectors without running build/tests.
+   * @param changedFiles - Optional whitespace/comma-separated file list used instead of git diff in affected discovery.
+   *
+   * @example
+   * dagger call test-playwright --source . --package-paths "apps/web"
+   */
+  @func()
+  async testPlaywright(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+    packagePaths = ".",
+    testSelector = "",
+    testScript = "test:e2e",
+    runBuild = true,
+    registryScope = "staytunedllp",
+    browsers = "chromium",
+    runAffected = false,
+    base = "origin/main",
+    listOnly = false,
+    changedFiles = "",
+  ): Promise<string> {
+    // Verify chromium-bidi using the private helper
+    await this.verifyChromiumBidi(source, nodeAuthToken, packagePaths);
+
+    return runPlaywrightTests(source, {
+      nodeAuthToken,
+      packagePaths,
+      testSelector,
+      testScript,
+      runBuild,
+      registryScope,
+      browsers,
+      runAffected,
+      base,
+      listOnly,
+      changedFiles,
+    });
+  }
+
+  /**
+   * Validate that `chromium-bidi` is installed in the selected package path.
+   *
+   * @param source - Repository source directory that contains the package to inspect.
+   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
+   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for the chromium-bidi check.
+   */
+  private async verifyChromiumBidi(
+    source: Directory,
+    nodeAuthToken?: Secret,
+    packagePaths = ".",
+  ): Promise<string> {
+    return runNodeChecks(source, nodeAuthToken, {
+      packagePaths,
+      verifyChromiumBidi: true,
+    });
+  }
+
+  /**
    * Retrieves an array of changed files based on the specified mode.
    *
    * @param source - The source directory to check for changed files.
@@ -256,7 +270,7 @@ export class StaydevopsTs {
   async gitDiff(
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
-    mode: "staged" | "previous" | "between" = "staged",
+    mode: string = "staged",
     commitRange = "",
   ): Promise<string[]> {
     switch (mode) {
@@ -270,7 +284,6 @@ export class StaydevopsTs {
         }
         return gitDiffBetweenCommits(source, commitRange);
       default: {
-        const _exhaustiveCheck: never = mode;
         throw new Error("Unsupported git diff mode");
       }
     }
@@ -300,7 +313,7 @@ export class StaydevopsTs {
    */
   @func()
   async fbApphosting(
-    action: "deploy" | "delete",
+    action: string,
     projectId: string,
     backendId: string,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
@@ -345,7 +358,6 @@ export class StaydevopsTs {
       );
     }
 
-    const _exhaustiveCheck: never = action;
     throw new Error("Unsupported action");
   }
 
