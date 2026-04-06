@@ -26,7 +26,11 @@ import { runPlaywrightTests } from "./playwright/index.js";
 type CheckMode = "format" | "lint" | "build" | "test";
 
 /**
- * Collection of repository checks and validation tools.
+ * Collection of repository checks and validation tools for Node.js projects.
+ *
+ * This sub-module provides high-performance, cache-efficient workflows for
+ * common CI tasks such as formatting, linting, testing, and building.
+ * It is designed to work seamlessly in both standard repositories and monorepos.
  */
 @object()
 export class Checks {
@@ -40,13 +44,19 @@ export class Checks {
   }
 
   /**
-   * Install Node dependencies and optionally provision Playwright and Firebase tooling.
+   * Fully prepares a Node.js workspace environment by:
+   * 1. Synchronizing repository manifests (.npmrc, package-lock.json).
+   * 2. Authenticating with the GitHub Packages registry.
+   * 3. Mounting persistent cache volumes for maximum performance.
+   * 4. Installing production and development dependencies via 'npm ci'.
+   * 5. (Optional) Provisioning Playwright browsers and system dependencies.
+   * 6. (Optional) Bootstrapping Firebase CLI tooling.
    *
    * @param source - Repository source directory to install into the workspace container.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
-   * @param packagePaths - Package path or comma-separated package paths relative to the source root where npm installs should run.
-   * @param playwrightInstall - When true, installs Playwright system dependencies and Chromium into the prepared workspace.
-   * @param firebaseTools - When true, installs Firebase CLI tooling in the prepared workspace container.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
+   * @param packagePaths - Relative path (or CSV list of paths) where npm installs should run. Defaults to the source root.
+   * @param playwrightInstall - Enable to install Playwright browsers and OS-level system dependencies into the container.
+   * @param firebaseTools - Enable to install the Firebase CLI (firebase-tools) into the prepared workspace.
    *
    * @example
    * dagger call checks install --source . --playwright-install
@@ -71,7 +81,7 @@ export class Checks {
   }
 
   /**
-   * Run the repository formatting check with `npm run format:check`.
+   * Validates repository formatting using the standard `npm run format:check` command.
    *
    * @param source - Repository source directory to validate.
    *
@@ -91,7 +101,7 @@ export class Checks {
   }
 
   /**
-   * Run the repository linter with `npm run lint`.
+   * Executes the repository linter using the standard `npm run lint` command.
    *
    * @param source - Repository source directory to lint.
    *
@@ -111,7 +121,7 @@ export class Checks {
   }
 
   /**
-   * Run the repository build with `npm run build`.
+   * Verifies that the repository builds successfully using the `npm run build` command.
    *
    * @param source - Repository source directory to build.
    *
@@ -131,7 +141,7 @@ export class Checks {
   }
 
   /**
-   * Run the repository test suite with `npm run test`.
+   * Executes the standard repository test suite using the `npm run test` command.
    *
    * @param source - Repository source directory to test.
    *
@@ -155,6 +165,20 @@ export class Checks {
 
 /**
  * Shared Dagger module for Node/TypeScript repository checks and deployment helpers.
+ *
+ * `Staydevops-TS` is a comprehensive toolkit designed to streamline CI/CD pipelines
+ * for modern TypeScript applications. It provides a suite of high-level Dagger functions
+ * for:
+ *
+ * - 🔍 **Repository Health**: Automated linting, formatting, and build verification.
+ * - 🧪 **Advanced Testing**: Integrated Playwright E2E testing with built-in "Affected Test" discovery.
+ * - 🚀 **Firebase Deployment**: Streamlined pipelines for Firebase Hosting and App Hosting.
+ * - 📦 **Package Publishing**: Deterministic npm publishing with automatic GitHub Release integration.
+ * - 📂 **Git Utilities**: Helpers for discovering changed files and diff ranges.
+ *
+ * Built with performance and security in mind, this module leverages Dagger's
+ * advanced caching and secure secret handling to provide a robust foundation for
+ * staytunedllp infrastructure and beyond.
  */
 @object()
 export class StaydevopsTs {
@@ -177,23 +201,26 @@ export class StaydevopsTs {
   }
 
   /**
-   * Run Playwright E2E tests for a package inside the provided source tree.
+   * Orchestrates high-performance Playwright E2E test execution.
    *
-   * @param source - Repository source directory containing Playwright tests.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when installing private npm packages.
-   * @param packagePaths - Package path or comma-separated package paths relative to the source root. The first path is used for build/test execution.
-   * @param testSelector - Optional selector/path passed to the npm test script using `--`.
-   * @param testScript - Npm script to run for tests. Defaults to `test:e2e`.
-   * @param runBuild - When true, runs `npm run build` before executing tests.
-   * @param registryScope - GitHub Packages scope used when authenticating npm.
-   * @param browsers - Browser list for Playwright install commands, as a comma-separated string.
-   * @param runAffected - When true, resolves affected tests from git diff and runs only those selectors.
-   * @param base - Base ref used by affected discovery when `runAffected` is enabled.
-   * @param listOnly - When true with `runAffected`, returns discovered selectors without running build/tests.
-   * @param changedFiles - Optional whitespace/comma-separated file list used instead of git diff in affected discovery.
+   * Includes advanced features like dependency layering, browser caching, and
+   * Staytuned's "Affected Test" discovery for lightning-fast feedback loops.
+   *
+   * @param source - The repository source directory.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
+   * @param packagePaths - The target package path (or CSV list) relative to the source root.
+   * @param testSelector - Optional selector expression (path or tag) passed to Playwright via `--`.
+   * @param testScript - The npm script to invoke for testing. Defaults to 'test:e2e'.
+   * @param runBuild - When true, ensures 'npm run build' completes before test execution. Highly recommended for TypeScript projects.
+   * @param registryScope - The GitHub Packages organization scope (e.g. 'staytunedllp').
+   * @param browsers - Comma-separated list of browsers to provision (supported: 'chromium', 'firefox', 'webkit').
+   * @param runAffected - Enable intelligent test discovery to run only tests affected by your current git diff.
+   * @param base - The base git ref to compare against for affected discovery (e.g. 'origin/main').
+   * @param listOnly - Disables test execution and instead returns the discovered test selectors as a string.
+   * @param changedFiles - Manually specify a list of changed files to use for affected discovery, bypassing git diff.
    *
    * @example
-   * dagger call test-playwright --source . --package-paths "apps/web"
+   * dagger call test-playwright --source . --package-paths "apps/web" --run-affected
    */
   @func()
   async testPlaywright(
@@ -251,20 +278,17 @@ export class StaydevopsTs {
   }
 
   /**
-   * Retrieves an array of changed files based on the specified mode.
+   * Retrieves an array of changed file paths using git diff.
+   *
+   * This is a powerful helper for automating logic based on PR changes.
    *
    * @param source - The source directory to check for changed files.
-   * @param mode - The diff mode to use: 'staged', 'previous', or 'between'.
-   * @param commitRange - A string specifying the range of commits (required for 'between' mode).
+   * @param mode - The diffing strategy: 'staged' (uncommitted), 'previous' (last commit), or 'between' (custom range).
+   * @param commitRange - The specific git range string (e.g. "HEAD~2..HEAD"). Required if mode is 'between'.
    *
    * @example
+   * # Check for files in current PR branch
    * dagger call git-diff --source . --mode staged
-   *
-   * @example
-   * dagger call git-diff --source . --mode previous
-   *
-   * @example
-   * dagger call git-diff --source . --mode between --commit-range "HEAD~2..HEAD"
    */
   @func()
   async gitDiff(
@@ -290,26 +314,26 @@ export class StaydevopsTs {
   }
 
   /**
-   * Performs actions on Firebase App Hosting backends.
+   * Unified management of Firebase App Hosting backends.
    *
-   * @param action - The action to perform: 'deploy' or 'delete'.
-   * @param projectId - Firebase project ID used for deployment.
-   * @param backendId - Firebase App Hosting backend identifier.
-   * @param source - Repository source directory containing the application to deploy (required for deploy).
-   * @param rootDir - Application root directory inside the source tree (deploy only).
-   * @param appId - Optional Firebase app ID used when creating a backend (deploy only).
-   * @param region - Firebase App Hosting region (deploy only).
-   * @param gcpCredentials - Optional GCP service account secret.
-   * @param wifProvider - Workload Identity Federation provider resource name (deploy only).
-   * @param wifServiceAccount - Workload Identity Federation service account email (deploy only).
-   * @param wifOidcToken - Optional OIDC token secret for WIF authentication (deploy only).
-   * @param wifAudience - Optional WIF audience override (deploy only).
+   * This function automates the creation, deployment, and deletion of App Hosting
+   * backends, supporting both Personal Access Tokens and Workload Identity Federation (WIF).
+   *
+   * @param action - The backend lifecycle action: 'deploy' or 'delete'.
+   * @param projectId - The unique identifier of your Firebase/GCP project.
+   * @param backendId - The unique identifier for this specific App Hosting backend.
+   * @param source - Repository source directory (required for 'deploy' action).
+   * @param rootDir - Root directory of the application inside your repository. Defaults to '.'.
+   * @param appId - Associate this backend with a specific Firebase Web App ID (deploy only).
+   * @param region - The GCP region to provision the backend in (e.g. 'us-central1').
+   * @param gcpCredentials - Optional secret containing GCP service account JSON content.
+   * @param wifProvider - Full resource name of the WIF provider (deploy only).
+   * @param wifServiceAccount - Email of the service account to impersonate via WIF (deploy only).
+   * @param wifOidcToken - OIDC token secret required for WIF authentication in CI environments.
+   * @param wifAudience - Optional specific audience for the WIF OIDC token.
    *
    * @example
-   * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "backend-id"
-   *
-   * @example
-   * dagger call fb-apphosting --action delete --project-id "my-project" --backend-id "backend-id"
+   * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "web-app"
    */
   @func()
   async fbApphosting(
@@ -362,22 +386,28 @@ export class StaydevopsTs {
   }
 
   /**
-   * Build and deploy a Firebase web hosting project from the provided source tree.
+   * High-level pipeline for building and deploying Firebase Web Hosting projects.
    *
-   * @param source - Repository source directory containing the Firebase project and any frontend or backend packages.
-   * @param projectId - Firebase project ID used for the deploy command and frontend environment generation.
-   * @param gcpCredentials - GCP service account JSON secret used for Firebase deployment authentication.
-   * @param appId - Optional Firebase app ID to inject into frontend environment variables before building.
-   * @param only - Optional Firebase deploy target selector passed to `firebase deploy --only`.
-   * @param frontendDir - Optional frontend package directory to build before deployment, relative to the source root.
-   * @param backendDir - Optional backend or secondary package directory whose dependencies should be installed before deployment.
-   * @param firebaseDir - Optional directory containing `firebase.json`. Defaults to the workspace root.
-   * @param webappConfig - Optional secret containing Firebase web app config JSON to write into frontend environment variables.
-   * @param extraEnv - Optional secret containing extra `.env` lines appended before the frontend build runs.
-   * @param nodeAuthToken - Optional GitHub Packages token secret. Required only when frontend or backend installs private npm packages.
+   * This function provides a complete "Build once, deploy anywhere" workflow by:
+   * 1. Preparing a Node workspace with all required dependencies.
+   * 2. Injecting Firebase App ID and Web App Config into the frontend environment.
+   * 3. Executing the frontend build (e.g. 'npm run build').
+   * 4. Authenticating with GCP and deploying to Firebase Hosting.
+   *
+   * @param source - Repository source directory containing the Firebase project and application packages.
+   * @param projectId - The target Firebase project ID.
+   * @param gcpCredentials - Secret container for the GCP service account JSON key.
+   * @param appId - Optional Firebase App ID to inject as NEXT_PUBLIC_FIREBASE_APP_ID or similar.
+   * @param only - Optional deployment filter (e.g. 'hosting', 'functions').
+   * @param frontendDir - Relative path to the frontend package directory.
+   * @param backendDir - Relative path to a backend or secondary package directory to prepare.
+   * @param firebaseDir - Directory containing 'firebase.json'. Defaults to the workspace root.
+   * @param webappConfig - Optional secret JSON containing the full Firebase web app configuration.
+   * @param extraEnv - Optional secret containing extra environment variables for the frontend build.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    *
    * @example
-   * dagger call fb-webhosting --source . --project-id "my-firebase-project" --gcp-credentials env:GCP_CREDENTIALS
+   * dagger call fb-webhosting --source . --project-id "my-project" --gcp-credentials env:GCP_KEY
    */
   @func({ cache: "never" })
   async fbWebhosting(
@@ -407,21 +437,26 @@ export class StaydevopsTs {
   }
 
   /**
-   * Deterministic package publishing logic for npm packages.
-   * For merged release PRs, this also creates the GitHub Release after publishing the npm package and can finalize release labels.
+   * Deterministic and secure npm package publishing pipeline.
+   *
+   * This function manages the full release lifecycle including:
+   * 1. Version validation and conflict checking against the GitHub Packages registry.
+   * 2. Automated PR-based pre-release versioning (e.g. 1.0.0-pre-pr42).
+   * 3. Collaborative release finalization for merged Pull Requests.
+   * 4. Creation of GitHub Releases and associated git tags.
    *
    * @param source - Repository source directory to publish from.
-   * @param ref - Git ref triggering the workflow (e.g. refs/tags/v1.2.3 for release events).
-   * @param eventName - GitHub event name (allowed: release, workflow_dispatch).
-   * @param githubToken - GitHub PAT for npm authentication and PR validation.
-   * @param repoOwner - Repository owner (e.g. StaytunedLLP).
-   * @param repoName - Repository name (e.g. devops).
-   * @param inputBranch - Manual branch input provided for workflow_dispatch.
-   * @param releasePrNumber - Release PR number to finalize after publishing a merged release commit.
-   * @param registryScope - The scope of the npm package (e.g. staytunedllp).
+   * @param ref - The git ref triggering the release (e.g. 'refs/heads/main' or a tag).
+   * @param eventName - The GitHub event name (allowed: 'workflow_dispatch', 'push').
+   * @param githubToken - GitHub Personal Access Token (PAT) with repository and package write scopes.
+   * @param repoOwner - The GitHub organization or user (e.g. 'StaytunedLLP').
+   * @param repoName - The repository name.
+   * @param inputBranch - The branch name to target when triggered via manual dispatch.
+   * @param releasePrNumber - The Pull Request number associated with the release (for automated finalization).
+   * @param registryScope - The organization scope for the npm package. Defaults to 'staytunedllp'.
    *
    * @example
-   * dagger call publish-package --source . --ref "refs/tags/v1.2.3" --event-name "release" --github-token env:GITHUB_TOKEN --repo-owner "StaytunedLLP" --repo-name "devops"
+   * dagger call publish-package --source . --ref "refs/heads/main" --github-token env:GITHUB_TOKEN
    */
   @func({ cache: "never" })
   async publishPackage(
