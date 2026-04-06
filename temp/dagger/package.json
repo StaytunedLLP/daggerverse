@@ -1,7 +1,0 @@
-{
-  "type": "module",
-  "packageManager": "npm@10.7.0",
-  "dependencies": {
-    "typescript": "^5.5.4"
-  }
-}
