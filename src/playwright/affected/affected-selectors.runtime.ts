@@ -291,12 +291,14 @@ function affectedPackages(
   if (changed.length === 0) {
     const infrastructureChanged = allFiles.some(
       (file) =>
-        file.includes("tools/scripts/") ||
-        file.endsWith("package.json") ||
-        file.endsWith("tsconfig.json") ||
-        file.endsWith("yarn.lock") ||
-        file.endsWith("package-lock.json") ||
-        file.endsWith("playwright.config.ts"),
+        !file.startsWith(".github/") &&
+        !file.startsWith("dagger/") &&
+        (file.includes("tools/scripts/") ||
+          file.endsWith("package.json") ||
+          file.endsWith("tsconfig.json") ||
+          file.endsWith("yarn.lock") ||
+          file.endsWith("package-lock.json") ||
+          file.endsWith("playwright.config.ts")),
     );
 
     return infrastructureChanged ? packageNames : [];
