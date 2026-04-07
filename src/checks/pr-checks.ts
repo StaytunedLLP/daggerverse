@@ -136,7 +136,7 @@ async function postPrComment(
 ): Promise<void> {
   await dag
     .container()
-    .from("ghcr.io/cli/cli:2.65.0")
+    .from("ghcr.io/cli/cli:2.89.0")
     .withSecretVariable("GH_TOKEN", githubToken)
     .withNewFile("/tmp/comment.md", comment)
     .withExec(
