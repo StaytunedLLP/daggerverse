@@ -24,6 +24,7 @@ A collection of repository validation tools:
 
 ### Functions
 
+- `check-pr-title`: validates the PR title against Conventional Commits. Optionally posts a comment to the PR on failure if `--github-token` is provided.
 - `git-diff`: retrieves changed files based on mode (`staged`, `previous`, `between`)
 - `fb-apphosting`: performs actions (`deploy`, `delete`) on Firebase App Hosting backends
 - `fb-webhosting`: installs, builds, and deploys a Firebase web hosting project
