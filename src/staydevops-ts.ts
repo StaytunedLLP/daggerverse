@@ -240,6 +240,7 @@ export class StaydevopsTs {
     base = "origin/main",
     listOnly = false,
     changedFiles = "",
+    skipReferenceChecks = true,
   ): Promise<string> {
     // Verify chromium-bidi using the private helper
     await this.verifyChromiumBidi(source, nodeAuthToken, packagePaths);
@@ -256,6 +257,7 @@ export class StaydevopsTs {
       base,
       listOnly,
       changedFiles,
+      skipReferenceChecks,
     });
   }
 
