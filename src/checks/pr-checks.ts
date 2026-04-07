@@ -1,5 +1,4 @@
 import { File, Secret, dag } from "@dagger.io/dagger";
-import { STRICT_SHELL_HEADER } from "../shared/constants.js";
 
 const ALLOWED_PREFIXES = [
   "feat",
@@ -74,7 +73,15 @@ export async function checkPrTitleFromEvent(
     }
   }
 
-  const event = JSON.parse(content);
+  let event: any;
+  try {
+    event = JSON.parse(content);
+  } catch (error: unknown) {
+    throw new Error(
+      `Failed to parse GitHub event file: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   const title = event.pull_request?.title;
 
   if (!title) {
@@ -119,7 +126,7 @@ export async function checkPrTitleFromEvent(
 }
 
 /**
- * Posts a comment to a GitHub Pull Request using the `gh` CLI.
+ * Posts a comment to a GitHub Pull Request using the official `gh` CLI image.
  */
 async function postPrComment(
   githubToken: Secret,
@@ -129,16 +136,22 @@ async function postPrComment(
 ): Promise<void> {
   await dag
     .container()
-    .from("alpine:latest")
-    .withExec(["apk", "add", "github-cli", "bash"])
+    .from("ghcr.io/cli/cli:2.65.0")
     .withSecretVariable("GH_TOKEN", githubToken)
     .withNewFile("/tmp/comment.md", comment)
-    .withExec([
-      "bash",
-      "-c",
-      `${STRICT_SHELL_HEADER}
-      gh pr comment ${prNumber} --repo "${repoFullName}" --body-file /tmp/comment.md
-      `,
-    ])
+    .withExec(
+      [
+        "pr",
+        "comment",
+        prNumber.toString(),
+        "--repo",
+        repoFullName,
+        "--body-file",
+        "/tmp/comment.md",
+      ],
+      {
+        useEntrypoint: true,
+      },
+    )
     .sync();
 }
