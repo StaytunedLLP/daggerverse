@@ -23,12 +23,12 @@
     "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
-    "@dagger.io/dagger": "^0.20.1"
+    "@dagger.io/dagger": "^0.20.3"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "@dagger.io/dagger": "^0.20.1"
+    "@dagger.io/dagger": "^0.20.3"
   }
 }
