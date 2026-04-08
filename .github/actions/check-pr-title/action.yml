@@ -1,0 +1,19 @@
+name: 'Check PR Title'
+description: 'Validates PR title against Conventional Commits and posts a comment on failure.'
+inputs:
+  github-token:
+    description: 'GitHub Token for Dagger'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: PR Title Check
+      run: |
+        # Note: Once the PR is merged to main, you can use the main branch reference
+        dagger call -m github.com/StaytunedLLP/daggerverse \
+          check-pr-title \
+          --event-file=${{ github.event_path }} \
+          --github-token=env:GITHUB_TOKEN
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
