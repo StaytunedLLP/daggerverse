@@ -135,6 +135,8 @@ When acting as an AI coding/devops agent in this repository:
 - Prefer minimal, targeted changes over broad refactors.
 - Preserve existing public APIs unless change is requested.
 - Keep docs/examples consistent with real module signatures.
+- Keep `/docs` up to date whenever `src/` files are added, removed, renamed, or behavior changes in a way that affects module documentation, examples, feature maps, or integration guidance.
+- When source functionality changes, review the corresponding file in `/docs` and update cross-links from `docs/README.md` if the public capability map changed.
 - Validate changes with at least `npm run build` whenever code is modified.
 - Favor secure secret handling (`env:`/Dagger `Secret`), never hardcode credentials.
 
