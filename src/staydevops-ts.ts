@@ -1,12 +1,14 @@
 import {
   Container,
   Directory,
+  File,
   Secret,
   argument,
   check,
   func,
   object,
 } from "@dagger.io/dagger";
+import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
@@ -182,6 +184,24 @@ export class Checks {
  */
 @object()
 export class StaydevopsTs {
+  /**
+   * Validates the PR title according to Conventional Commits naming convention.
+   *
+   * @param eventFile - Optional GitHub event JSON file containing the PR title.
+   * @param githubToken - Optional GitHub token to post a comment if validation fails.
+   *
+   * @example
+   * dagger call check-pr-title --event-file=$GITHUB_EVENT_PATH --github-token=env:GITHUB_TOKEN
+   */
+  @check()
+  @func()
+  async checkPrTitle(
+    eventFile?: File,
+    githubToken?: Secret,
+  ): Promise<void> {
+    await checkPrTitleFromEvent(eventFile, githubToken);
+  }
+
   /**
    * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
    */
