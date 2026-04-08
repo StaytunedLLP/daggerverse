@@ -9,6 +9,7 @@ import {
   object,
 } from "@dagger.io/dagger";
 import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
+import { checkRegions } from "./checks/region-enforcement.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
@@ -162,7 +163,41 @@ export class Checks {
     await this.runDefaultCheck(source, "test");
   }
 
-
+  /**
+   * Enforces code region structure on changed files (Phase 1).
+   *
+   * @param source - Repository source directory to validate.
+   * @param eventFile - Optional GitHub event JSON file containing PR context.
+   * @param threshold - Size threshold in lines to define a file as "non-trivial".
+   * @param extensions - Comma-separated list of file extensions to check.
+   * @param ignore - Comma-separated list of patterns to ignore.
+   * @param base - Custom base branch for diffing.
+   *
+   * @example
+   * dagger call checks regions --source .
+   */
+  @check()
+  @func()
+  async regions(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    eventFile?: File,
+    threshold?: number,
+    extensions?: string,
+    ignore?: string,
+    base?: string,
+  ): Promise<void> {
+    await checkRegions(source, {
+      eventFile,
+      threshold,
+      extensions: extensions?.split(",").map((s) => s.trim()),
+      ignore: ignore?.split(",").map((s) => s.trim()),
+      base,
+    });
+  }
 }
 
 /**
@@ -200,6 +235,42 @@ export class StaydevopsTs {
     githubToken?: Secret,
   ): Promise<void> {
     await checkPrTitleFromEvent(eventFile, githubToken);
+  }
+
+  /**
+   * Enforces code region structure on changed files (Phase 1).
+   *
+   * @param source - Repository source directory to validate.
+   * @param eventFile - Optional GitHub event JSON file containing PR context.
+   * @param threshold - Size threshold in lines to define a file as "non-trivial".
+   * @param extensions - Comma-separated list of file extensions to check.
+   * @param ignore - Comma-separated list of patterns to ignore.
+   * @param base - Custom base branch for diffing.
+   *
+   * @example
+   * dagger call check-regions --source .
+   */
+  @check()
+  @func()
+  async checkRegions(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    eventFile?: File,
+    threshold?: number,
+    extensions?: string,
+    ignore?: string,
+    base?: string,
+  ): Promise<void> {
+    await checkRegions(source, {
+      eventFile,
+      threshold,
+      extensions: extensions?.split(",").map((s) => s.trim()),
+      ignore: ignore?.split(",").map((s) => s.trim()),
+      base,
+    });
   }
 
   /**

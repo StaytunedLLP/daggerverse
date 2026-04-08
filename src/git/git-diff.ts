@@ -119,7 +119,13 @@ export async function gitDiffBetweenCommits(
   const gitContainer = container ?? createGitContainer(source);
 
   const filesOutput = await gitContainer
-    .withExec(["git", "diff", "--name-only", commitRange])
+    .withExec([
+      "git",
+      "diff",
+      "--name-only",
+      "--diff-filter=ACMR",
+      commitRange,
+    ])
     .stdout();
 
   // Split the output into an array of files, removing any empty entries
