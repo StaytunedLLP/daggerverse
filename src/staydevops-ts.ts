@@ -24,6 +24,7 @@ import {
 } from "./git/index.js";
 import { publishPackage } from "./publish/index.js";
 import { runPlaywrightTests } from "./playwright/index.js";
+import { Planning } from "./planning/index.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
 
@@ -504,5 +505,16 @@ export class StaydevopsTs {
       repoName,
       registryScope,
     });
+  }
+
+  /**
+   * Returns the collection of planning tools for syncing documents and feature flags.
+   *
+   * @example
+   * dagger call planning sync-planning --source . --github-token env:GITHUB_TOKEN
+   */
+  @func()
+  planning(): Planning {
+    return new Planning();
   }
 }
