@@ -12,4 +12,5 @@ export type PlaywrightTestOptions = {
   base?: string;
   listOnly?: boolean;
   changedFiles?: string;
+  skipReferenceChecks?: boolean;
 };

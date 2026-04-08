@@ -28,6 +28,11 @@ function normalizeBrowsers(browsers?: string): string[] {
   return normalized.length > 0 ? normalized : DEFAULT_PLAYWRIGHT_BROWSERS;
 }
 
+function shouldSkipReferenceChecksFromEnv(): boolean {
+  const raw = process.env.SKIP_REFERENCE_CHECKS?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
 export async function runPlaywrightTests(
   source: Directory,
   options: PlaywrightTestOptions = {},
@@ -76,7 +81,12 @@ export async function runPlaywrightTests(
   }
 
   if (options.runBuild ?? true) {
-    container = runNpmScript(container, "build", {
+    const shouldSkip =
+      (options.skipReferenceChecks ?? false) ||
+      shouldSkipReferenceChecksFromEnv();
+    const buildCommand = shouldSkip ? "build:copilot" : "build";
+
+    container = runNpmScript(container, buildCommand, {
       cwd: packagePath,
     });
   }
