@@ -8,7 +8,7 @@ description: Architect-level DevOps optimization for Dagger workflows on ARC wit
 This skill defines optimization standards for Dagger workflows in Staytuned repositories, with a focus on:
 
 - direct `dagger` CLI usage in CI (not wrapper actions)
-- ARC infrastructure alignment (`st-arc`)
+- Infrastructure alignment (`ubuntu-latest`)
 - lockfile-first and cache-volume-first architecture
 - reusable TypeScript module composition from shared helpers
 
@@ -25,12 +25,12 @@ A practical architecture + execution policy for CI/CD and Dagger modules so pipe
 
 ## Procedure: Daggerizing a Workflow
 
-### 1. Runner Setup (st-arc)
+### 1. Runner Setup (ubuntu-latest)
 
-All Daggerized workflows **must** run on `st-arc`.
+All Daggerized workflows **must** run on `ubuntu-latest`.
 
 ```yaml
-runs-on: st-arc
+runs-on: ubuntu-latest
 ```
 
 ### 2. Bootstrapping
@@ -38,7 +38,7 @@ runs-on: st-arc
 Always include the bootstrap step to connect to the internal Dagger engine.
 
 ```yaml
-- name: Bootstrap Dagger (ARC)
+- name: Bootstrap Dagger
   uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
   with:
     namespace: dagger
@@ -57,11 +57,11 @@ Standard pattern:
 ```yaml
 jobs:
   ci:
-    runs-on: st-arc
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Bootstrap Dagger (ARC)
+      - name: Bootstrap Dagger
         uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
         with:
           namespace: dagger
@@ -148,7 +148,7 @@ async test(
 ```yaml
 jobs:
   test:
-    runs-on: st-arc
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Bootstrap Dagger

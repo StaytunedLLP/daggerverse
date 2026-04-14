@@ -15,7 +15,7 @@ Treat this section as the highest-priority implementation policy for this reposi
    - Use Dagger layer caching and `cacheVolume` mounts intentionally.
 
 2. **Infrastructure security**
-   - All Dagger operations in GitHub Actions must run on internal ARC infrastructure (`st-arc`).
+   - All Dagger operations in GitHub Actions must run on `ubuntu-latest`.
 
 3. **Generalization (multi-repo ready)**
    - Do not hardcode repository-specific paths, scripts, or assumptions.
@@ -25,16 +25,16 @@ Treat this section as the highest-priority implementation policy for this reposi
 
 Any GitHub Actions job that invokes Dagger must:
 
-1. set `runs-on: st-arc`
-2. bootstrap the Dagger engine on ARC before any Dagger call
+1. set `runs-on: ubuntu-latest`
+2. bootstrap the Dagger engine before any Dagger call
 
 ```yaml
 jobs:
   job_name:
-    runs-on: st-arc
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Bootstrap Dagger (ARC)
+      - name: Bootstrap Dagger
         uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
         with:
           namespace: dagger
