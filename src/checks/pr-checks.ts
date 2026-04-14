@@ -19,24 +19,28 @@ const ALLOWED_PREFIXES = [
  */
 export function validatePrTitle(title: string): void {
   const prefixPattern = ALLOWED_PREFIXES.join("|");
+
   // Conventional Commits 1.0.0:
   // <type>[optional scope][optional !]: <description>
   // MUST be followed by REQUIRED terminal colon and space.
   const regex = new RegExp(`^(${prefixPattern})(\\([\\w.-]+\\))?!?: .+$`);
 
   if (!regex.test(title)) {
-    let reason = "The title must follow the pattern: <type>[optional scope][optional !]: <description>";
+    let reason =
+      "The title must follow the pattern: <type>[optional scope][optional !]: <description>";
 
-    if (!ALLOWED_PREFIXES.some(p => title.startsWith(p))) {
+    if (!ALLOWED_PREFIXES.some((p) => title.startsWith(p))) {
       reason = `The type must be one of: ${ALLOWED_PREFIXES.join(", ")}.`;
     } else if (!title.includes(": ")) {
-      reason = "A space MUST follow the terminal colon after the type/scope (e.g., 'feat: my feature').";
+      reason =
+        "A space MUST follow the terminal colon after the type/scope (e.g., 'feat: my feature').";
     } else if (title.includes("(!)")) {
-      reason = "Breaking changes are indicated by a '!' before the colon (e.g., 'feat!: description'), not inside the scope.";
+      reason =
+        "Breaking changes are indicated by a '!' before the colon (e.g., 'feat!: description'), not inside the scope.";
     }
 
     throw new Error(
-      `PR title "${title}" is invalid according to Conventional Commits 1.0.0. ${reason}`,
+      `PR title "${title}" is invalid according to Conventional Commits 1.0.0. ${reason}`
     );
   }
 }
@@ -50,7 +54,7 @@ export function validatePrTitle(title: string): void {
  */
 export async function checkPrTitleFromEvent(
   eventFile?: File,
-  githubToken?: Secret,
+  githubToken?: Secret
 ): Promise<void> {
   let content: string;
 
@@ -78,7 +82,9 @@ export async function checkPrTitleFromEvent(
     event = JSON.parse(content);
   } catch (error: unknown) {
     throw new Error(
-      `Failed to parse GitHub event file: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to parse GitHub event file: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
 
@@ -92,8 +98,10 @@ export async function checkPrTitleFromEvent(
   try {
     validatePrTitle(title);
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
 
+    // If a GitHub token is provided, attempt to post a PR comment
     if (githubToken) {
       const prNumber = event.pull_request?.number;
       const repoFullName = event.repository?.full_name;
@@ -104,20 +112,25 @@ export async function checkPrTitleFromEvent(
             githubToken,
             repoFullName,
             prNumber,
-            `❌ **PR Title Validation Failed**\n\n${errorMessage}`,
+            `❌ **PR Title Validation Failed**\n\n${errorMessage}`
           );
         } catch (commentError) {
           console.warn(
-            `Failed to post PR comment: ${commentError instanceof Error ? commentError.message : String(commentError)}`,
+            `Failed to post PR comment: ${
+              commentError instanceof Error
+                ? commentError.message
+                : String(commentError)
+            }`
           );
         }
       } else {
         console.warn(
-          "Could not post PR comment: pull_request.number or repository.full_name missing in event file.",
+          "Could not post PR comment: pull_request.number or repository.full_name missing in event file."
         );
       }
     }
 
+    // Re-throw validation error so CI still fails
     if (errorMessage.includes("PR title")) {
       throw error;
     }
@@ -126,32 +139,36 @@ export async function checkPrTitleFromEvent(
 }
 
 /**
- * Posts a comment to a GitHub Pull Request using the official `gh` CLI image.
+ * Posts a comment to a GitHub Pull Request using the GitHub REST API.
+ *
+ * Replaces the previous implementation that used the `gh` CLI container.
+ * This avoids GHCR image pull issues and works reliably in CI environments.
  */
 async function postPrComment(
   githubToken: Secret,
   repoFullName: string,
   prNumber: number,
-  comment: string,
+  comment: string
 ): Promise<void> {
-  await dag
-    .container()
-    .from("ghcr.io/cli/cli:2.89.0")
-    .withSecretVariable("GH_TOKEN", githubToken)
-    .withNewFile("/tmp/comment.md", comment)
-    .withExec(
-      [
-        "pr",
-        "comment",
-        prNumber.toString(),
-        "--repo",
-        repoFullName,
-        "--body-file",
-        "/tmp/comment.md",
-      ],
-      {
-        useEntrypoint: true,
+  const token = await githubToken.plaintext();
+
+  const response = await fetch(
+    `https://api.github.com/repos/${repoFullName}/issues/${prNumber}/comments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
       },
-    )
-    .sync();
+      body: JSON.stringify({ body: comment }),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `GitHub API error: ${response.status} ${response.statusText} - ${text}`
+    );
+  }
 }
