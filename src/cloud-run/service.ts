@@ -31,7 +31,7 @@ export type CloudRunStaticSiteOptions = {
 };
 
 function formatEnvValue(value: string): string {
-  return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : JSON.stringify(value);
+  return /^[A-Za-z0-9_.-]+$/.test(value) ? value : JSON.stringify(value);
 }
 
 function parseViteConfigPayload(raw: string): Record<string, string> {
@@ -67,7 +67,7 @@ function parseViteConfigPayload(raw: string): Record<string, string> {
     }
 
     if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`viteConfig key '${key}' must contain a non-empty string.`);
+      throw new Error(`viteConfig key '${key}' must have a non-empty string value.`);
     }
 
     envEntries[key] = value;
@@ -108,9 +108,9 @@ function withViteEnv(
 function runtimeNginxConfig(): string {
   return [
     "server {",
-    "  listen 8080;",
+    `  listen ${CLOUD_RUN_PORT};`,
     "  server_name _;",
-    "  root /usr/share/nginx/html;",
+    `  root ${CLOUD_RUN_STATIC_ROOT};`,
     "  index index.html;",
     "",
     "  location / {",
@@ -144,14 +144,25 @@ async function publishCloudRunContainer(
   gcpCredentials: Secret,
 ): Promise<string> {
   const credentials = await gcpCredentials.plaintext();
+  let parsedCredentials: Record<string, unknown>;
 
-  if (!credentials.trim().startsWith("{")) {
-    throw new Error(
-      "The gcpCredentials secret must be a GCP JSON credentials document.",
-    );
+  try {
+    parsedCredentials = JSON.parse(credentials) as Record<string, unknown>;
+  } catch {
+    throw new Error("gcpCredentials secret must contain valid JSON credentials.");
   }
 
-  const registryAddress = imageRef.split("/")[0];
+  const requiredFields = ["type", "client_email", "private_key"];
+
+  for (const field of requiredFields) {
+    if (typeof parsedCredentials[field] !== "string") {
+      throw new Error(
+        `The gcpCredentials secret must be a GCP JSON credentials document with '${field}'.`,
+      );
+    }
+  }
+
+  const registryAddress = registryAddressFromImageRef(imageRef);
   const registryPassword = dag.setSecret(
     "artifact-registry-password",
     Buffer.from(credentials, "utf8").toString("base64"),
@@ -235,6 +246,18 @@ function buildImageRef(
   return `${registryRegion}-docker.pkg.dev/${projectId}/${repository}/${imageName}:${imageTag}`;
 }
 
+function registryAddressFromImageRef(imageRef: string): string {
+  const [registryAddress, ...pathParts] = imageRef.split("/");
+
+  if (!registryAddress || pathParts.length < 3) {
+    throw new Error(
+      "Cloud Run image reference must include registry host, project, repository, and image name.",
+    );
+  }
+
+  return registryAddress;
+}
+
 /**
  * Builds a Vite application inside Dagger, publishes a Cloud Run container image,
  * and deploys the service from that image.
@@ -257,7 +280,7 @@ export async function deployCloudRunStaticSitePipeline(
     imageRef,
     gcpCredentials,
   );
-  const allowUnauthenticated = options.allowUnauthenticated !== false;
+  const allowUnauthenticated = options.allowUnauthenticated ?? true;
 
   const cmd = [
     "gcloud",

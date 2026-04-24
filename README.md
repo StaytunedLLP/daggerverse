@@ -103,6 +103,20 @@ dagger call -m github.com/StaytunedLLP/daggerverse cloud-run-static-site \
 }
 ```
 
+Migration note:
+
+- `fb-apphosting` and `fb-webhosting` now fail fast by design.
+- Existing workflows using those functions must migrate immediately.
+- Move preview and deployment workflows to `cloud-run-static-site` so Dagger owns the build and Cloud Run consumes the published image.
+
+| Old input | New input |
+| --- | --- |
+| `backend-id` | `service` |
+| `project-id` | `project-id` |
+| `webappConfig` / `extraEnv` | single `vite-config` JSON secret |
+| Firebase backend preview lifecycle | Cloud Run `deploy` / `delete` on the preview service |
+| Firebase source deploy | Cloud Run image deploy from Artifact Registry |
+
 ## When a GitHub token is needed
 
 This module no longer requires `NODE_AUTH_TOKEN` for public repositories by default.

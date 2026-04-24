@@ -417,9 +417,24 @@ export class StaydevopsTs {
 
   /**
    * Firebase App Hosting source-based deploys were removed in favor of Cloud Run images built inside Dagger.
+   *
+   * @deprecated Use cloudRunStaticSite instead.
    */
   @func({ cache: "never" })
-  async fbWebhosting(): Promise<string> {
+  async fbWebhosting(
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    _source: Directory,
+    _projectId: string,
+    _gcpCredentials: Secret,
+    _appId?: string,
+    _only?: string,
+    _frontendDir?: string,
+    _backendDir?: string,
+    _firebaseDir?: string,
+    _webappConfig?: Secret,
+    _extraEnv?: Secret,
+    _nodeAuthToken?: Secret,
+  ): Promise<string> {
     throw new Error(
       "fbWebhosting has been removed. Use cloudRunStaticSite so Dagger owns the build and Cloud Run consumes a prebuilt image.",
     );
@@ -427,9 +442,25 @@ export class StaydevopsTs {
 
   /**
    * Firebase App Hosting lifecycle management was removed because preview lifecycle now belongs to Cloud Run services.
+   *
+   * @deprecated Use cloudRunStaticSite instead.
    */
   @func({ cache: "never" })
-  async fbApphosting(): Promise<string> {
+  async fbApphosting(
+    _action: string,
+    _projectId: string,
+    _backendId: string,
+    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
+    _source?: Directory,
+    _rootDir = ".",
+    _appId = "",
+    _region = "asia-southeast1",
+    _gcpCredentials?: Secret,
+    _wifProvider = "",
+    _wifServiceAccount = "",
+    _wifOidcToken?: Secret,
+    _wifAudience = "",
+  ): Promise<string> {
     throw new Error(
       "fbApphosting has been removed. Use cloudRunStaticSite with action 'deploy' or 'delete' so Firebase no longer manages builds.",
     );
