@@ -1,5 +1,4 @@
 import {
-  Container,
   Directory,
   File,
   Secret,
@@ -10,13 +9,11 @@ import {
 } from "@dagger.io/dagger";
 import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
 import {
-  deleteFirebaseApphostingBackend,
-  deployFirebaseApphostingProject,
-} from "./firebase/app-hosting.js";
-import { firebaseAppHostingBase } from "./firebase/base.js";
+  deleteCloudRunService,
+  deployCloudRunStaticSitePipeline,
+} from "./cloud-run/service.js";
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
-import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
 import {
   gitDiffBetweenCommits,
   gitDiffPrevious,
@@ -174,7 +171,7 @@ export class Checks {
  *
  * - 🔍 **Repository Health**: Automated linting, formatting, and build verification.
  * - 🧪 **Advanced Testing**: Integrated Playwright E2E testing with built-in "Affected Test" discovery.
- * - 🚀 **Firebase Deployment**: Streamlined pipelines for Firebase Hosting and App Hosting.
+ * - 🚀 **Cloud Run Deployment**: Dagger-owned build and deploy pipelines for Vite applications.
  * - 📦 **Package Publishing**: Deterministic npm publishing with automatic GitHub Release integration.
  * - 📂 **Git Utilities**: Helpers for discovering changed files and diff ranges.
  *
@@ -200,13 +197,6 @@ export class StaydevopsTs {
     githubToken?: Secret,
   ): Promise<void> {
     await checkPrTitleFromEvent(eventFile, githubToken);
-  }
-
-  /**
-   * Returns a Firebase App Hosting base container with firebase-tools installed and cached.
-   */
-  private base(): Container {
-    return firebaseAppHostingBase();
   }
 
   /**
@@ -336,71 +326,89 @@ export class StaydevopsTs {
   }
 
   /**
-   * Unified management of Firebase App Hosting backends.
+   * Builds a Vite application in Dagger, publishes a Cloud Run image, and deploys or deletes the service.
    *
-   * This function automates the creation, deployment, and deletion of App Hosting
-   * backends, supporting both Personal Access Tokens and Workload Identity Federation (WIF).
+   * This flow removes Firebase-managed builds entirely. `deploy` builds the app,
+   * injects validated `VITE_*` config, packages a static runtime image, publishes it to
+   * Artifact Registry, and deploys the image to Cloud Run. `delete` removes the Cloud Run service.
    *
-   * @param action - The backend lifecycle action: 'deploy' or 'delete'.
-   * @param projectId - The unique identifier of your Firebase/GCP project.
-   * @param backendId - The unique identifier for this specific App Hosting backend.
-   * @param source - Repository source directory (required for 'deploy' action).
-   * @param rootDir - Root directory of the application inside your repository. Defaults to '.'.
-   * @param appId - Associate this backend with a specific Firebase Web App ID (deploy only).
-   * @param region - The GCP region to provision the backend in (e.g. 'us-central1').
-   * @param gcpCredentials - Optional secret containing GCP service account JSON content.
-   * @param wifProvider - Full resource name of the WIF provider (deploy only).
-   * @param wifServiceAccount - Email of the service account to impersonate via WIF (deploy only).
-   * @param wifOidcToken - OIDC token secret required for WIF authentication in CI environments.
-   * @param wifAudience - Optional specific audience for the WIF OIDC token.
+   * @param action - The service lifecycle action: 'deploy' or 'delete'.
+   * @param projectId - The target GCP project ID.
+   * @param service - The Cloud Run service name.
+   * @param region - The Cloud Run region (for example, 'us-central1').
+   * @param repository - The Artifact Registry Docker repository name.
+   * @param gcpCredentials - Secret containing the GCP service account JSON key.
+   * @param source - Repository source directory (required for 'deploy').
+   * @param viteConfig - Secret JSON object containing build-time `VITE_*` values (required for 'deploy').
+   * @param frontendDir - Relative path to the Vite application directory. Defaults to '.'.
+   * @param buildScript - npm build script name. Defaults to 'build'.
+   * @param distDir - Build output directory. Defaults to 'dist'.
+   * @param imageName - Optional image name override. Defaults to the service name.
+   * @param imageTag - Optional image tag. Defaults to 'latest'.
+   * @param nodeAuthToken - Optional GitHub Packages npm authentication token.
+   * @param registryScope - Optional GitHub Packages scope. Defaults to 'staytunedllp'.
+   * @param allowUnauthenticated - Whether to allow unauthenticated access on deploy. Defaults to true.
+   * @param registryRegion - Optional Artifact Registry location. Defaults to the Cloud Run region.
    *
    * @example
-   * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "web-app"
+   * dagger call cloud-run-static-site --action deploy --source . --project-id "my-project" --service "web-app" --repository "preview-images" --gcp-credentials env:GCP_KEY --vite-config env:VITE_CONFIG
    */
-  @func()
-  async fbApphosting(
+  @func({ cache: "never" })
+  async cloudRunStaticSite(
     action: string,
     projectId: string,
-    backendId: string,
+    service: string,
+    region: string,
+    repository: string,
+    gcpCredentials: Secret,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source?: Directory,
-    rootDir = ".",
-    appId = "",
-    region = "asia-southeast1",
-    gcpCredentials?: Secret,
-    wifProvider = "",
-    wifServiceAccount = "",
-    wifOidcToken?: Secret,
-    wifAudience = "",
+    viteConfig?: Secret,
+    frontendDir = ".",
+    buildScript = "build",
+    distDir = "dist",
+    imageName = "",
+    imageTag = "latest",
+    nodeAuthToken?: Secret,
+    registryScope = "staytunedllp",
+    allowUnauthenticated = true,
+    registryRegion = "",
   ): Promise<string> {
     if (action === "deploy") {
       if (!source) {
         throw new Error("source is required for 'deploy' action");
       }
-      return deployFirebaseApphostingProject(
+      if (!viteConfig) {
+        throw new Error("viteConfig is required for 'deploy' action");
+      }
+      return deployCloudRunStaticSitePipeline(
         source,
         projectId,
-        backendId,
-        rootDir,
-        appId,
+        service,
         region,
+        repository,
         gcpCredentials,
-        wifProvider,
-        wifServiceAccount,
-        wifOidcToken,
-        wifAudience,
+        viteConfig,
+        {
+          frontendDir,
+          buildScript,
+          distDir,
+          imageName,
+          imageTag,
+          nodeAuthToken,
+          registryScope,
+          allowUnauthenticated,
+          registryRegion,
+        },
       );
     }
 
     if (action === "delete") {
-      return deleteFirebaseApphostingBackend(
+      return deleteCloudRunService(
         projectId,
-        backendId,
+        service,
+        region,
         gcpCredentials,
-        wifProvider,
-        wifServiceAccount,
-        wifOidcToken,
-        wifAudience,
       );
     }
 
@@ -408,54 +416,23 @@ export class StaydevopsTs {
   }
 
   /**
-   * High-level pipeline for building and deploying Firebase Web Hosting projects.
-   *
-   * This function provides a complete "Build once, deploy anywhere" workflow by:
-   * 1. Preparing a Node workspace with all required dependencies.
-   * 2. Injecting Firebase App ID and Web App Config into the frontend environment.
-   * 3. Executing the frontend build (e.g. 'npm run build').
-   * 4. Authenticating with GCP and deploying to Firebase Hosting.
-   *
-   * @param source - Repository source directory containing the Firebase project and application packages.
-   * @param projectId - The target Firebase project ID.
-   * @param gcpCredentials - Secret container for the GCP service account JSON key.
-   * @param appId - Optional Firebase App ID to inject as NEXT_PUBLIC_FIREBASE_APP_ID or similar.
-   * @param only - Optional deployment filter (e.g. 'hosting', 'functions').
-   * @param frontendDir - Relative path to the frontend package directory.
-   * @param backendDir - Relative path to a backend or secondary package directory to prepare.
-   * @param firebaseDir - Directory containing 'firebase.json'. Defaults to the workspace root.
-   * @param webappConfig - Optional secret JSON containing the full Firebase web app configuration.
-   * @param extraEnv - Optional secret containing extra environment variables for the frontend build.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
-   *
-   * @example
-   * dagger call fb-webhosting --source . --project-id "my-project" --gcp-credentials env:GCP_KEY
+   * Firebase App Hosting source-based deploys were removed in favor of Cloud Run images built inside Dagger.
    */
   @func({ cache: "never" })
-  async fbWebhosting(
-    @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    source: Directory,
-    projectId: string,
-    gcpCredentials: Secret,
-    appId?: string,
-    only?: string,
-    frontendDir?: string,
-    backendDir?: string,
-    firebaseDir?: string,
-    webappConfig?: Secret,
-    extraEnv?: Secret,
-    nodeAuthToken?: Secret,
-  ): Promise<string> {
-    return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
-      appId,
-      frontendDir,
-      backendDir,
-      firebaseDir,
-      only,
-      webappConfig,
-      extraEnv,
-      nodeAuthToken,
-    });
+  async fbWebhosting(): Promise<string> {
+    throw new Error(
+      "fbWebhosting has been removed. Use cloudRunStaticSite so Dagger owns the build and Cloud Run consumes a prebuilt image.",
+    );
+  }
+
+  /**
+   * Firebase App Hosting lifecycle management was removed because preview lifecycle now belongs to Cloud Run services.
+   */
+  @func({ cache: "never" })
+  async fbApphosting(): Promise<string> {
+    throw new Error(
+      "fbApphosting has been removed. Use cloudRunStaticSite with action 'deploy' or 'delete' so Firebase no longer manages builds.",
+    );
   }
 
   /**

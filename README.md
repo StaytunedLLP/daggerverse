@@ -7,7 +7,7 @@ This repo is published to Daggerverse as the `staydevops-ts` module and exposes 
 - installing Node workspaces
 - preparing Playwright-ready CI containers
 - validating package prerequisites
-- deploying Firebase Hosting projects
+- building Vite apps inside Dagger and deploying them to Cloud Run
 
 ## Module API
 
@@ -26,8 +26,7 @@ A collection of repository validation tools:
 
 - `check-pr-title`: validates the PR title against Conventional Commits. Optionally posts a comment to the PR on failure if `--github-token` is provided.
 - `git-diff`: retrieves changed files based on mode (`staged`, `previous`, `between`)
-- `fb-apphosting`: performs actions (`deploy`, `delete`) on Firebase App Hosting backends
-- `fb-webhosting`: installs, builds, and deploys a Firebase web hosting project
+- `cloud-run-static-site`: validates a `VITE_*` secret, builds a Vite app inside Dagger, publishes a container image, and deploys or deletes a Cloud Run service
 - `publish-package`: publishes npm packages and creates GitHub releases
 
 ## Usage
@@ -69,23 +68,39 @@ dagger call -m github.com/StaytunedLLP/daggerverse checks test-playwright \
   --test-script=test:e2e
 ```
 
-Deploy Firebase App Hosting:
+Deploy a Vite app to Cloud Run:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse fb-apphosting \
+dagger call -m github.com/StaytunedLLP/daggerverse cloud-run-static-site \
   --action deploy \
-  --source . \
-  --project-id=<firebase-project-id> \
-  --backend-id=<backend-id>
+  --source=. \
+  --project-id=<gcp-project-id> \
+  --service=<cloud-run-service> \
+  --region=<cloud-run-region> \
+  --repository=<artifact-registry-repository> \
+  --gcp-credentials=env:GCP_CREDENTIALS \
+  --vite-config=env:VITE_CONFIG
 ```
 
-Deploy Firebase Web Hosting:
+Delete a Cloud Run preview service:
 
 ```bash
-dagger call -m github.com/StaytunedLLP/daggerverse fb-webhosting \
-  --source=. \
-  --project-id=<firebase-project-id> \
+dagger call -m github.com/StaytunedLLP/daggerverse cloud-run-static-site \
+  --action delete \
+  --project-id=<gcp-project-id> \
+  --service=<cloud-run-service> \
+  --region=<cloud-run-region> \
+  --repository=<artifact-registry-repository> \
   --gcp-credentials=env:GCP_CREDENTIALS
+```
+
+`VITE_CONFIG` must be a single JSON secret payload. Example:
+
+```json
+{
+  "VITE_API_URL": "https://api.example.com",
+  "VITE_PUBLIC_KEY": "example"
+}
 ```
 
 ## When a GitHub token is needed
@@ -130,7 +145,8 @@ This repository also exports plain TypeScript helpers for internal reuse:
 - `runNodeChecks`
 - `prepareNodeWorkspace`
 - `runPlaywrightTests`
-- `firebaseDeployWebhostingPipeline`
+- `deployCloudRunStaticSitePipeline`
+- `deleteCloudRunService`
 - `gitDiffStaged`
 - `gitDiffPrevious`
 - `gitDiffBetweenCommits`
