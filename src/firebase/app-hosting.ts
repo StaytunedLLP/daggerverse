@@ -6,6 +6,7 @@ import {
   FIREBASE_WORKDIR,
   GCP_CREDENTIALS_PATH,
 } from "./constants.js";
+import { shellQuote } from "../shared/path-utils.js";
 
 function withAppHostingAuth(
   container: Container,
@@ -82,17 +83,33 @@ function backendExistsCommand(
   appId: string,
   region: string,
 ): string[] {
-  const appFlag = appId ? ` --app ${appId}` : "";
+  const createCommand = [
+    "firebase",
+    "apphosting:backends:create",
+    "--backend",
+    shellQuote(backendId),
+    "--project",
+    shellQuote(projectId),
+    "--primary-region",
+    shellQuote(region),
+    appId ? `--app ${shellQuote(appId)}` : "",
+    "--non-interactive",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return [
     "bash",
-    "-c",
-    `if firebase apphosting:backends:list --project ${projectId} | grep -q "\\b${backendId}\\b"; then ` +
-      `  echo "Backend ${backendId} already exists."; ` +
-      `else ` +
-      `  echo "Backend ${backendId} not found, attempting to create in ${region}..."; ` +
-      `  firebase apphosting:backends:create --backend ${backendId} --project ${projectId} --primary-region ${region}${appFlag} --non-interactive; ` +
-      `fi`,
+    "-lc",
+    [
+      "set -euo pipefail",
+      `if firebase apphosting:backends:get ${shellQuote(backendId)} --project ${shellQuote(projectId)} --json >/dev/null 2>&1; then`,
+      `  echo "Backend ${backendId} already exists.";`,
+      "else",
+      `  echo "Backend ${backendId} not found, attempting to create in ${region}...";`,
+      `  ${createCommand}`,
+      "fi",
+    ].join("\n"),
   ];
 }
 
@@ -126,18 +143,7 @@ export async function deployFirebaseApphostingProject(
     wifAudience,
   ).withExec(backendExistsCommand(projectId, backendId, appId, region));
 
-  const deployed = authenticated.withExec([
-    "firebase",
-    "deploy",
-    "--only",
-    `apphosting:${backendId}`,
-    "--project",
-    projectId,
-    "--non-interactive",
-    "--force",
-  ]);
-
-  const backendJson = await deployed
+  const backendJson = await authenticated
     .withExec([
       "firebase",
       "apphosting:backends:get",

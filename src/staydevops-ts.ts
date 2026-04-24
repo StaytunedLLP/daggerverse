@@ -15,6 +15,11 @@ import {
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import {
+  deleteFirebaseApphostingBackend,
+  deployFirebaseApphostingProject,
+} from "./firebase/app-hosting.js";
+import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
+import {
   gitDiffBetweenCommits,
   gitDiffPrevious,
   gitDiffStaged,
@@ -171,7 +176,7 @@ export class Checks {
  *
  * - 🔍 **Repository Health**: Automated linting, formatting, and build verification.
  * - 🧪 **Advanced Testing**: Integrated Playwright E2E testing with built-in "Affected Test" discovery.
- * - 🚀 **Cloud Run Deployment**: Dagger-owned build and deploy pipelines for Vite applications.
+ * - 🚀 **Deployment Options**: Dagger-owned Cloud Run builds, Firebase Hosting deploys, and Firebase App Hosting backend lifecycle helpers.
  * - 📦 **Package Publishing**: Deterministic npm publishing with automatic GitHub Release integration.
  * - 📂 **Git Utilities**: Helpers for discovering changed files and diff ranges.
  *
@@ -416,54 +421,94 @@ export class StaydevopsTs {
   }
 
   /**
-   * Firebase App Hosting source-based deploys were removed in favor of Cloud Run images built inside Dagger.
+   * High-level pipeline for building and deploying Firebase Web Hosting projects.
    *
-   * @deprecated Use cloudRunStaticSite instead.
+   * Dagger remains the build system: dependencies are installed, frontend env is prepared,
+   * and the static build is produced before the Firebase Hosting deploy step uploads the
+   * built assets to the CDN.
    */
   @func({ cache: "never" })
   async fbWebhosting(
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    _source: Directory,
-    _projectId: string,
-    _gcpCredentials: Secret,
-    _appId?: string,
-    _only?: string,
-    _frontendDir?: string,
-    _backendDir?: string,
-    _firebaseDir?: string,
-    _webappConfig?: Secret,
-    _extraEnv?: Secret,
-    _nodeAuthToken?: Secret,
+    source: Directory,
+    projectId: string,
+    gcpCredentials: Secret,
+    appId?: string,
+    only?: string,
+    frontendDir?: string,
+    backendDir?: string,
+    firebaseDir?: string,
+    webappConfig?: Secret,
+    extraEnv?: Secret,
+    nodeAuthToken?: Secret,
   ): Promise<string> {
-    throw new Error(
-      "fbWebhosting has been removed. Use cloudRunStaticSite so Dagger owns the build and Cloud Run consumes a prebuilt image.",
-    );
+    return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
+      appId,
+      frontendDir,
+      backendDir,
+      firebaseDir,
+      only,
+      webappConfig,
+      extraEnv,
+      nodeAuthToken,
+    });
   }
 
   /**
-   * Firebase App Hosting lifecycle management was removed because preview lifecycle now belongs to Cloud Run services.
+   * Manages Firebase App Hosting backend lifecycle for PR previews without delegating builds to Firebase.
    *
-   * @deprecated Use cloudRunStaticSite instead.
+   * `deploy` ensures the backend exists and returns the stable preview URL for that backend.
+   * `delete` removes the backend when preview lifecycle ends.
    */
   @func({ cache: "never" })
   async fbApphosting(
-    _action: string,
-    _projectId: string,
-    _backendId: string,
+    action: string,
+    projectId: string,
+    backendId: string,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
-    _source?: Directory,
-    _rootDir = ".",
-    _appId = "",
-    _region = "asia-southeast1",
-    _gcpCredentials?: Secret,
-    _wifProvider = "",
-    _wifServiceAccount = "",
-    _wifOidcToken?: Secret,
-    _wifAudience = "",
+    source?: Directory,
+    rootDir = ".",
+    appId = "",
+    region = "asia-southeast1",
+    gcpCredentials?: Secret,
+    wifProvider = "",
+    wifServiceAccount = "",
+    wifOidcToken?: Secret,
+    wifAudience = "",
   ): Promise<string> {
-    throw new Error(
-      "fbApphosting has been removed. Use cloudRunStaticSite with action 'deploy' or 'delete' so Firebase no longer manages builds.",
-    );
+    if (action === "deploy") {
+      if (!source) {
+        throw new Error("source is required for 'deploy' action");
+      }
+
+      return deployFirebaseApphostingProject(
+        source,
+        projectId,
+        backendId,
+        rootDir,
+        appId,
+        region,
+        gcpCredentials,
+        wifProvider,
+        wifServiceAccount,
+        wifOidcToken,
+        wifAudience,
+      );
+    }
+
+    if (action === "delete") {
+      return deleteFirebaseApphostingBackend(
+        projectId,
+        backendId,
+        gcpCredentials,
+        wifProvider,
+        wifServiceAccount,
+        wifOidcToken,
+        wifAudience,
+      );
+    }
+
+    throw new Error("Unsupported action");
   }
 
   /**

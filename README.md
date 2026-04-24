@@ -7,7 +7,7 @@ This repo is published to Daggerverse as the `staydevops-ts` module and exposes 
 - installing Node workspaces
 - preparing Playwright-ready CI containers
 - validating package prerequisites
-- building Vite apps inside Dagger and deploying them to Cloud Run
+- building apps inside Dagger and deploying them to Cloud Run or Firebase Hosting
 
 ## Module API
 
@@ -26,6 +26,8 @@ A collection of repository validation tools:
 
 - `check-pr-title`: validates the PR title against Conventional Commits. Optionally posts a comment to the PR on failure if `--github-token` is provided.
 - `git-diff`: retrieves changed files based on mode (`staged`, `previous`, `between`)
+- `fb-apphosting`: creates/deletes Firebase App Hosting backends for preview lifecycle management without handing builds to Firebase
+- `fb-webhosting`: builds in Dagger and deploys the resulting static assets to Firebase Hosting
 - `cloud-run-static-site`: validates a `VITE_*` secret, builds a Vite app inside Dagger, publishes a container image, and deploys or deletes a Cloud Run service
 - `publish-package`: publishes npm packages and creates GitHub releases
 
@@ -68,6 +70,25 @@ dagger call -m github.com/StaytunedLLP/daggerverse checks test-playwright \
   --test-script=test:e2e
 ```
 
+Manage Firebase App Hosting backend lifecycle:
+
+```bash
+dagger call -m github.com/StaytunedLLP/daggerverse fb-apphosting \
+  --action deploy \
+  --source=. \
+  --project-id=<firebase-project-id> \
+  --backend-id=<backend-id>
+```
+
+Deploy static assets to Firebase Hosting:
+
+```bash
+dagger call -m github.com/StaytunedLLP/daggerverse fb-webhosting \
+  --source=. \
+  --project-id=<firebase-project-id> \
+  --gcp-credentials=env:GCP_CREDENTIALS
+```
+
 Deploy a Vite app to Cloud Run:
 
 ```bash
@@ -103,19 +124,18 @@ dagger call -m github.com/StaytunedLLP/daggerverse cloud-run-static-site \
 }
 ```
 
-Migration note:
+Deployment separation:
 
-- `fb-apphosting` and `fb-webhosting` now fail fast by design.
-- Existing workflows using those functions must migrate immediately.
-- Move preview and deployment workflows to `cloud-run-static-site` so Dagger owns the build and Cloud Run consumes the published image.
+- **Dagger** owns builds in all cases.
+- **Firebase Hosting** remains a valid static deploy target.
+- **Cloud Run** remains a valid container deploy target.
+- **Firebase App Hosting** is retained for backend lifecycle only (create/delete stable preview backends).
 
-| Old input | New input |
-| --- | --- |
-| `backend-id` | `service` |
-| `project-id` | `project-id` |
-| `webappConfig` / `extraEnv` | single `vite-config` JSON secret |
-| Firebase backend preview lifecycle | Cloud Run `deploy` / `delete` on the preview service |
-| Firebase source deploy | Cloud Run image deploy from Artifact Registry |
+Current limitation:
+
+- `fb-apphosting` does not hand a Dagger-built artifact to Firebase App Hosting directly.
+- Use it for PR backend lifecycle and stable preview URLs.
+- Use `cloud-run-static-site` when you need Dagger to build and deploy the runtime image directly.
 
 ## When a GitHub token is needed
 
