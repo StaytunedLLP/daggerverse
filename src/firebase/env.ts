@@ -134,6 +134,8 @@ export async function withFrontendEnv(
       "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
       ...echoCommands,
       "if [ -n \"${EXTRA_ENV_SECRET:-}\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
+      "echo '--- Generated .env content (masked) ---'",
+      "cat .env",
     ].join("\n"),
   ]);
 }
