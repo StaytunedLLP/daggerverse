@@ -385,6 +385,7 @@ export async function firebaseApphostingPipeline(
     options.wifProvider,
     options.wifServiceAccount,
     options.wifOidcToken,
+    options.gcpToken,
   );
 
   // 4. Deploy the image to Cloud Run (which powers the App Hosting backend)
@@ -414,6 +415,7 @@ export async function firebaseApphostingPipeline(
     options.wifServiceAccount ?? "",
     options.wifOidcToken,
     options.wifAudience ?? "",
+    options.gcpToken,
   );
 
   return deployer

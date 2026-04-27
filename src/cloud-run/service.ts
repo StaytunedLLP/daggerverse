@@ -145,10 +145,17 @@ export async function publishCloudRunContainer(
   wifProvider = "",
   wifServiceAccount = "",
   wifOidcToken?: Secret,
+  gcpToken?: Secret,
 ): Promise<string> {
   const registryAddress = registryAddressFromImageRef(imageRef);
   let username = "";
   let passwordSecret: Secret | undefined = undefined;
+
+  if (gcpToken) {
+    const token = await gcpToken.plaintext();
+    username = "oauth2accesstoken";
+    passwordSecret = dag.setSecret("artifact-registry-access-token", token.trim());
+  }
 
   let isWif = false;
   if (gcpCredentials) {
@@ -183,9 +190,9 @@ export async function publishCloudRunContainer(
       "artifact-registry-access-token",
       accessToken.trim(),
     );
-  } else if (!gcpCredentials) {
+  } else if (!gcpCredentials && !gcpToken) {
     throw new Error(
-      "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided for publishing.",
+      "Either gcpCredentials, gcpToken, or (wifProvider, wifServiceAccount, wifOidcToken) must be provided for publishing.",
     );
   }
 
