@@ -413,6 +413,8 @@ export async function firebaseApphostingPipeline(
     "8080",
     "--revision-suffix",
     revisionSuffix,
+    "--update-env-vars",
+    `STAYDEVOPS_DEPLOY_ID=${Date.now()}`,
     "--quiet",
     "--allow-unauthenticated",
   ];

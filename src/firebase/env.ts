@@ -118,6 +118,9 @@ export async function withFrontendEnv(
       const value = parsed[configKey];
       if (typeof value === "string" && value.trim().length > 0) {
         const val = value.trim();
+        if (envKey === "VITE_FIREBASE_API_KEY") {
+          console.log(`🔑 Injected API Key: ${val.substring(0, 4)}... (length: ${val.length})`);
+        }
         envContent += `${envKey}=${val}\n`;
         // Also set as environment variable for the build process just in case
         configured = configured.withSecretVariable(envKey, dag.setSecret(envKey, val));
@@ -140,7 +143,10 @@ export async function withFrontendEnv(
     }
 
     // Write the .env file directly using withNewFile (safe from masking)
-    return configured.withNewFile(".env", envContent);
+    console.log(`📝 Writing .env file to ${options.frontendDir || 'root'}...`);
+    return configured
+      .withNewFile(".env", envContent)
+      .withExec(["bash", "-c", "echo '--- .env check ---' && ls -l .env && head -n 5 .env | sed 's/=.*/=/******/ '"]);
   }
 
   return configured;
