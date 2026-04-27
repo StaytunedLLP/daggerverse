@@ -425,6 +425,7 @@ export async function firebaseApphostingPipeline(
   );
 
   return deployer
+    .withEnvVariable("DEPLOY_CACHE_BUST", Date.now().toString())
     .withExec(deployCmd)
     .withExec([
       "gcloud",
