@@ -44,8 +44,7 @@ export async function deployFirebaseWebhostingProject(
       )
       .withoutEnvVariable("FIREBASE_TOKEN");
   } else if (wifProvider && wifServiceAccount && wifOidcToken) {
-    const resolvedAudience =
-      wifAudience.trim() || `https://iam.googleapis.com/${wifProvider.trim()}`;
+    const resolvedAudience = wifAudience.trim() || wifProvider.trim();
     const credentialsPayload = JSON.stringify(
       {
         type: "external_account",
