@@ -395,6 +395,7 @@ export async function firebaseApphostingPipeline(
   );
 
   // 4. Deploy the image to Cloud Run (which powers the App Hosting backend)
+  const revisionSuffix = `v${Date.now()}`;
   const deployCmd = [
     "gcloud",
     "run",
@@ -410,6 +411,8 @@ export async function firebaseApphostingPipeline(
     "managed",
     "--port",
     "8080",
+    "--revision-suffix",
+    revisionSuffix,
     "--quiet",
     "--allow-unauthenticated",
   ];

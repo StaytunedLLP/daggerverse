@@ -113,48 +113,36 @@ export async function withFrontendEnv(
       measurementId: "VITE_FIREBASE_MEASUREMENT_ID",
     };
 
+    let envContent = "";
     for (const [configKey, envKey] of Object.entries(mapping)) {
       const value = parsed[configKey];
       if (typeof value === "string" && value.trim().length > 0) {
-        // Convert the string to a Dagger Secret to MASK it in logs
-        const secret = dag.setSecret(envKey, value.trim());
-        configured = configured.withSecretVariable(envKey, secret);
+        const val = value.trim();
+        envContent += `${envKey}=${val}\n`;
+        // Also set as environment variable for the build process just in case
+        configured = configured.withSecretVariable(envKey, dag.setSecret(envKey, val));
       }
     }
+
+    // Add standard non-secret envs
+    envContent += `VITE_FIREBASE_PROJECT_ID=${options.projectId}\n`;
+    envContent += `VITE_FIREBASE_APP_ID=${options.appId || parsed.appId || ""}\n`;
+    if (options.firebaseEnv) envContent += `FIREBASE_ENV=${options.firebaseEnv}\n`;
+    if (options.firestoreDatabaseId) envContent += `FIRESTORE_DATABASE_ID=${options.firestoreDatabaseId}\n`;
+    if (options.functionsRegion) envContent += `VITE_FUNCTION_BASE_URL=https://${options.functionsRegion}-${options.projectId}.cloudfunctions.net\n`;
+
+    // Handle extraEnv if it's a JSON string or key=value pairs
+    if (options.extraEnv) {
+      const extraEnvValue = await options.extraEnv.plaintext();
+      if (extraEnvValue) {
+        envContent += `\n# Extra Envs\n${extraEnvValue}\n`;
+      }
+    }
+
+    // Write the .env file directly using withNewFile (safe from masking)
+    return configured.withNewFile(".env", envContent);
   }
 
-  if (options.extraEnv) {
-    configured = configured.withSecretVariable("EXTRA_ENV_SECRET", options.extraEnv);
-  }
-
-  // Write .env in the CURRENT directory (staying in caller's context like /workspace)
-  // Note: Dagger will mask the secret values in the logs even during this bash script.
-  // We must explicitly echo the VITE_ keys because 'env' hides secret variables.
-  const firebaseKeys = [
-    "VITE_FIREBASE_API_KEY",
-    "VITE_FIREBASE_AUTH_DOMAIN",
-    "VITE_FIREBASE_PROJECT_ID",
-    "VITE_FIREBASE_STORAGE_BUCKET",
-    "VITE_FIREBASE_MESSAGING_SENDER_ID",
-    "VITE_FIREBASE_APP_ID",
-    "VITE_FIREBASE_MEASUREMENT_ID",
-  ];
-
-  const echoCommands = firebaseKeys.map(
-    (k) => `if [ -n "\${${k}:-}" ]; then echo "${k}=\$${k}" >> .env; fi`,
-  );
-
-  return configured.withExec([
-    "bash",
-    "-lc",
-    [
-      STRICT_SHELL_HEADER,
-      "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
-      ...echoCommands,
-      "if [ -n \"${EXTRA_ENV_SECRET:-}\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
-      "echo '--- Generated .env content (masked) ---'",
-      "cat .env",
-    ].join("\n"),
-  ]);
+  return configured;
 }
 
