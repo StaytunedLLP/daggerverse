@@ -9,6 +9,10 @@ export type FirebaseBuildOptions = {
   appId?: string;
   webappConfig?: Secret;
   extraEnv?: Secret;
+  targetEnv?: string;
+  firebaseEnv?: string;
+  firestoreDatabaseId?: string;
+  functionsRegion?: string;
 };
 
 export async function buildFirebaseProjects(
@@ -25,6 +29,10 @@ export async function buildFirebaseProjects(
       appId: options.appId,
       webappConfig: options.webappConfig,
       extraEnv: options.extraEnv,
+      targetEnv: options.targetEnv,
+      firebaseEnv: options.firebaseEnv,
+      firestoreDatabaseId: options.firestoreDatabaseId,
+      functionsRegion: options.functionsRegion,
     });
   }
 
@@ -36,3 +44,4 @@ export async function buildFirebaseProjects(
 
   return container.directory(FIREBASE_WORKDIR);
 }
+

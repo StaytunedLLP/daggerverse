@@ -1,4 +1,4 @@
-import { Container, Directory, Secret } from "@dagger.io/dagger";
+import { Container, Directory, Secret, dag } from "@dagger.io/dagger";
 import { firebaseAppHostingBase } from "./base.js";
 import {
   FIREBASE_WIF_CREDENTIALS_PATH,
@@ -7,6 +7,40 @@ import {
   GCP_CREDENTIALS_PATH,
 } from "./constants.js";
 import { shellQuote } from "../shared/path-utils.js";
+import { withFrontendEnv } from "./env.js";
+import {
+  createCloudRunRuntimeContainer,
+  publishCloudRunContainer,
+  withCloudRunAuth,
+} from "../cloud-run/service.js";
+import {
+  DEFAULT_REGISTRY_SCOPE,
+  DEFAULT_WORKSPACE,
+} from "../shared/constants.js";
+import { withFullSource } from "../shared/npm.js";
+import { resolveWorkspacePath } from "../shared/path-utils.js";
+import { runNpmScript } from "../shared/scripts.js";
+import { createNodeWorkspace } from "../shared/workspace.js";
+
+export type FirebaseDeployApphostingOptions = {
+  gcpCredentials?: Secret;
+  wifProvider?: string;
+  wifServiceAccount?: string;
+  wifOidcToken?: Secret;
+  wifAudience?: string;
+  webappConfig?: Secret;
+  extraEnv?: Secret;
+  buildScript?: string;
+  distDir?: string;
+  repository?: string;
+  imageTag?: string;
+  nodeAuthToken?: Secret;
+  registryScope?: string;
+  targetEnv?: string;
+  firebaseEnv?: string;
+  firestoreDatabaseId?: string;
+  functionsRegion?: string;
+};
 
 function withAppHostingAuth(
   container: Container,
@@ -125,14 +159,33 @@ export async function deployFirebaseApphostingProject(
   wifServiceAccount = "",
   wifOidcToken?: Secret,
   wifAudience = "",
+  webappConfig?: Secret,
+  extraEnv?: Secret,
+  targetEnv?: string,
+  firebaseEnv?: string,
+  firestoreDatabaseId?: string,
+  functionsRegion?: string,
 ): Promise<string> {
-  const prepared = firebaseAppHostingBase()
+  let prepared = firebaseAppHostingBase()
     .withDirectory(FIREBASE_WORKDIR, source)
     .withWorkdir(FIREBASE_WORKDIR)
     .withNewFile(
       `${FIREBASE_WORKDIR}/firebase.json`,
       `${appHostingConfig(backendId, rootDir)}\n`,
     );
+
+  // Apply environment mapping if requested
+  prepared = withFrontendEnv(prepared, {
+    frontendDir: rootDir,
+    projectId,
+    appId,
+    webappConfig,
+    extraEnv,
+    targetEnv,
+    firebaseEnv,
+    firestoreDatabaseId,
+    functionsRegion,
+  });
 
   const authenticated = withAppHostingAuth(
     prepared,
@@ -191,6 +244,146 @@ export async function deleteFirebaseApphostingBackend(
       projectId,
       "--force",
       "--non-interactive",
+    ])
+    .stdout();
+}
+
+/**
+ * Builds the application with mapped environment variables.
+ */
+async function buildApphostingDist(
+  source: Directory,
+  projectId: string,
+  options: FirebaseDeployApphostingOptions = {},
+): Promise<Directory> {
+  const rootDir = ".";
+  const buildScript = options.buildScript?.trim() || "build";
+  const distDir = options.distDir?.trim() || "dist";
+
+  // Create workspace and install dependencies
+  let container = createNodeWorkspace(source, options.nodeAuthToken, {
+    packagePaths: rootDir,
+    registryScope: options.registryScope ?? DEFAULT_REGISTRY_SCOPE,
+    workspace: DEFAULT_WORKSPACE,
+    withPlaywrightCache: false,
+  });
+
+  // Inject full source
+  container = withFullSource(container, source, {
+    workspace: DEFAULT_WORKSPACE,
+    strategy: "overlay",
+  });
+
+  // Apply environment mapping (This is where .env is created)
+  container = withFrontendEnv(container, {
+    ...options,
+    projectId,
+    frontendDir: rootDir,
+  });
+
+  // Run build
+  container = runNpmScript(container, buildScript, {
+    cwd: rootDir,
+    workspace: DEFAULT_WORKSPACE,
+  });
+
+  const distPath = resolveWorkspacePath(DEFAULT_WORKSPACE, distDir);
+  return container.directory(distPath);
+}
+
+/**
+ * Full pipeline: Build assets -> Publish Docker Image -> Deploy to Cloud Run (for App Hosting).
+ */
+export async function firebaseApphostingPipeline(
+  source: Directory,
+  projectId: string,
+  backendId: string,
+  appId: string,
+  region: string,
+  gcpCredentials?: Secret,
+  options: FirebaseDeployApphostingOptions = {},
+): Promise<string> {
+  // 1. Ensure backend exists in Firebase (metadata management)
+  await deployFirebaseApphostingProject(
+    source,
+    projectId,
+    backendId,
+    ".", // rootDir
+    appId,
+    region,
+    gcpCredentials,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
+    options.wifAudience,
+    options.webappConfig,
+    options.extraEnv,
+    options.targetEnv,
+    options.firebaseEnv,
+    options.firestoreDatabaseId,
+    options.functionsRegion,
+  );
+
+  // 2. Build the distribution with correct ENVs
+  const dist = await buildApphostingDist(source, projectId, options);
+
+  // 3. Create and publish the runtime container
+  // We use the backendId as the service name and the targetEnv as the repository name
+  // to match the user's reference YAML pattern.
+  const repository = options.targetEnv || "previews";
+  const imageTag = options.imageTag || "latest";
+  const imageRef = `${region}-docker.pkg.dev/${projectId}/${repository}/${backendId}:${imageTag}`;
+
+  const runtimeContainer = createCloudRunRuntimeContainer(dist);
+
+  if (!gcpCredentials) {
+    throw new Error("gcpCredentials secret is required for publishing images.");
+  }
+
+  const publishedRef = await publishCloudRunContainer(
+    runtimeContainer,
+    imageRef,
+    gcpCredentials,
+  );
+
+  // 4. Deploy the image to Cloud Run (which powers the App Hosting backend)
+  const deployCmd = [
+    "gcloud",
+    "run",
+    "deploy",
+    backendId,
+    "--image",
+    publishedRef,
+    "--region",
+    region,
+    "--project",
+    projectId,
+    "--platform",
+    "managed",
+    "--port",
+    "8080",
+    "--quiet",
+    "--allow-unauthenticated",
+  ];
+
+  const deployer = withCloudRunAuth(
+    dag.container().from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"),
+    gcpCredentials,
+    projectId,
+  ).withExec(deployCmd);
+
+  return deployer
+    .withExec([
+      "gcloud",
+      "run",
+      "services",
+      "describe",
+      backendId,
+      "--region",
+      region,
+      "--project",
+      projectId,
+      "--format=value(status.url)",
     ])
     .stdout();
 }

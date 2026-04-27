@@ -17,6 +17,7 @@ import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
+  firebaseApphostingPipeline,
 } from "./firebase/app-hosting.js";
 import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
 import {
@@ -441,6 +442,10 @@ export class StaydevopsTs {
     webappConfig?: Secret,
     extraEnv?: Secret,
     nodeAuthToken?: Secret,
+    targetEnv?: string,
+    firebaseEnv?: string,
+    firestoreDatabaseId?: string,
+    functionsRegion?: string,
   ): Promise<string> {
     return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
       appId,
@@ -451,6 +456,10 @@ export class StaydevopsTs {
       webappConfig,
       extraEnv,
       nodeAuthToken,
+      targetEnv,
+      firebaseEnv,
+      firestoreDatabaseId,
+      functionsRegion,
     });
   }
 
@@ -475,24 +484,47 @@ export class StaydevopsTs {
     wifServiceAccount = "",
     wifOidcToken?: Secret,
     wifAudience = "",
+    webappConfig?: Secret,
+    extraEnv?: Secret,
+    targetEnv?: string,
+    firebaseEnv?: string,
+    firestoreDatabaseId?: string,
+    functionsRegion?: string,
+    buildScript?: string,
+    distDir?: string,
+    imageTag?: string,
+    nodeAuthToken?: Secret,
+    registryScope?: string,
   ): Promise<string> {
     if (action === "deploy") {
       if (!source) {
         throw new Error("source is required for 'deploy' action");
       }
 
-      return deployFirebaseApphostingProject(
+      return firebaseApphostingPipeline(
         source,
         projectId,
         backendId,
-        rootDir,
         appId,
         region,
         gcpCredentials,
-        wifProvider,
-        wifServiceAccount,
-        wifOidcToken,
-        wifAudience,
+        {
+          wifProvider,
+          wifServiceAccount,
+          wifOidcToken,
+          wifAudience,
+          webappConfig,
+          extraEnv,
+          targetEnv,
+          firebaseEnv,
+          firestoreDatabaseId,
+          functionsRegion,
+          buildScript,
+          distDir,
+          imageTag,
+          nodeAuthToken,
+          registryScope,
+        },
       );
     }
 

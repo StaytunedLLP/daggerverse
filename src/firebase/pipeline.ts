@@ -13,6 +13,10 @@ export type FirebaseDeployWebhostingOptions = {
   extraEnv?: Secret;
   nodeAuthToken?: Secret;
   registryScope?: string;
+  targetEnv?: string;
+  firebaseEnv?: string;
+  firestoreDatabaseId?: string;
+  functionsRegion?: string;
 };
 
 export async function firebaseDeployWebhostingPipeline(
@@ -22,7 +26,8 @@ export async function firebaseDeployWebhostingPipeline(
   options: FirebaseDeployWebhostingOptions = {},
 ): Promise<string> {
   const installDirs = [options.frontendDir, options.backendDir].filter(
-    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+    (entry): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0,
   );
 
   const installed = await installFirebaseDependencies(source, installDirs, {
@@ -35,6 +40,10 @@ export async function firebaseDeployWebhostingPipeline(
     appId: options.appId,
     webappConfig: options.webappConfig,
     extraEnv: options.extraEnv,
+    targetEnv: options.targetEnv,
+    firebaseEnv: options.firebaseEnv,
+    firestoreDatabaseId: options.firestoreDatabaseId,
+    functionsRegion: options.functionsRegion,
   });
   const deployed = await deployFirebaseWebhostingProject(
     built,
@@ -46,3 +55,4 @@ export async function firebaseDeployWebhostingPipeline(
 
   return deployed.stdout();
 }
+

@@ -128,7 +128,7 @@ function buildDistPath(frontendDir: string, distDir: string): string {
   );
 }
 
-function createCloudRunRuntimeContainer(dist: Directory): Container {
+export function createCloudRunRuntimeContainer(dist: Directory): Container {
   return dag
     .container()
     .from(CLOUD_RUN_RUNTIME_IMAGE)
@@ -138,7 +138,7 @@ function createCloudRunRuntimeContainer(dist: Directory): Container {
     .withNewFile(CLOUD_RUN_NGINX_CONF_PATH, runtimeNginxConfig());
 }
 
-async function publishCloudRunContainer(
+export async function publishCloudRunContainer(
   container: Container,
   imageRef: string,
   gcpCredentials: Secret,
@@ -176,7 +176,7 @@ async function publishCloudRunContainer(
     .publish(imageRef);
 }
 
-function withCloudRunAuth(
+export function withCloudRunAuth(
   container: Container,
   gcpCredentials: Secret,
   projectId: string,
