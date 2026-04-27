@@ -141,61 +141,120 @@ export function createCloudRunRuntimeContainer(dist: Directory): Container {
 export async function publishCloudRunContainer(
   container: Container,
   imageRef: string,
-  gcpCredentials: Secret,
+  gcpCredentials?: Secret,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
 ): Promise<string> {
-  const credentials = await gcpCredentials.plaintext();
-  let parsedCredentials: Record<string, unknown>;
-
-  try {
-    parsedCredentials = JSON.parse(credentials) as Record<string, unknown>;
-  } catch {
-    throw new Error("gcpCredentials secret must contain valid JSON credentials.");
-  }
-
-  const requiredFields = ["type", "client_email", "private_key"];
-
-  for (const field of requiredFields) {
-    if (typeof parsedCredentials[field] !== "string") {
-      throw new Error(
-        `The gcpCredentials secret must be a GCP JSON credentials document with '${field}'.`,
-      );
-    }
-  }
-
   const registryAddress = registryAddressFromImageRef(imageRef);
-  const registryPassword = dag.setSecret(
-    "artifact-registry-password",
-    Buffer.from(credentials, "utf8").toString("base64"),
-  );
+  let username = "";
+  let passwordSecret: Secret;
 
-  return container.withRegistryAuth(
-    registryAddress,
-    CLOUD_RUN_REGISTRY_USERNAME,
-    registryPassword,
-  )
+  if (gcpCredentials) {
+    const credentials = await gcpCredentials.plaintext();
+    username = CLOUD_RUN_REGISTRY_USERNAME;
+    passwordSecret = dag.setSecret(
+      "artifact-registry-password",
+      Buffer.from(credentials, "utf8").toString("base64"),
+    );
+  } else if (wifProvider && wifServiceAccount && wifOidcToken) {
+    // Exchange OIDC token for GCP access token
+    const tokenContainer = withCloudRunAuth(
+      dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
+      undefined,
+      "dummy-project",
+      wifProvider,
+      wifServiceAccount,
+      wifOidcToken,
+    );
+    const accessToken = await tokenContainer
+      .withExec(["gcloud", "auth", "print-access-token"])
+      .stdout();
+
+    username = "oauth2accesstoken";
+    passwordSecret = dag.setSecret(
+      "artifact-registry-access-token",
+      accessToken.trim(),
+    );
+  } else {
+    throw new Error(
+      "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided for publishing.",
+    );
+  }
+
+  return container
+    .withRegistryAuth(registryAddress, username, passwordSecret)
     .publish(imageRef);
 }
 
 export function withCloudRunAuth(
   container: Container,
-  gcpCredentials: Secret,
-  projectId: string,
+  gcpCredentials?: Secret,
+  projectId?: string,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
+  wifAudience = "",
 ): Container {
-  return container
-    .withMountedSecret(CLOUD_RUN_CREDENTIALS_PATH, gcpCredentials)
-    .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", CLOUD_RUN_CREDENTIALS_PATH)
-    .withEnvVariable(
-      "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-      CLOUD_RUN_CREDENTIALS_PATH,
-    )
-    .withExec([
+  let authContainer = container;
+
+  if (gcpCredentials) {
+    authContainer = authContainer
+      .withMountedSecret(CLOUD_RUN_CREDENTIALS_PATH, gcpCredentials)
+      .withEnvVariable(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        CLOUD_RUN_CREDENTIALS_PATH,
+      )
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        CLOUD_RUN_CREDENTIALS_PATH,
+      )
+      .withExec([
+        "gcloud",
+        "auth",
+        "activate-service-account",
+        "--key-file",
+        CLOUD_RUN_CREDENTIALS_PATH,
+      ]);
+  } else if (wifProvider && wifServiceAccount && wifOidcToken) {
+    const resolvedAudience =
+      wifAudience.trim() || `https://iam.googleapis.com/${wifProvider.trim()}`;
+    const credentialsPayload = JSON.stringify(
+      {
+        type: "external_account",
+        audience: resolvedAudience,
+        subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+        token_url: "https://sts.googleapis.com/v1/token",
+        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
+        credential_source: {
+          file: "/tmp/oidc-token.txt",
+        },
+      },
+      null,
+      2,
+    );
+
+    authContainer = authContainer
+      .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
+      .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
+      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json")
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        "/tmp/wif-credentials.json",
+      );
+  }
+
+  if (projectId) {
+    authContainer = authContainer.withExec([
       "gcloud",
-      "auth",
-      "activate-service-account",
-      "--key-file",
-      CLOUD_RUN_CREDENTIALS_PATH,
-    ])
-    .withExec(["gcloud", "config", "set", "project", projectId]);
+      "config",
+      "set",
+      "project",
+      projectId,
+    ]);
+  }
+
+  return authContainer;
 }
 
 async function buildStaticSiteDist(
@@ -268,10 +327,18 @@ export async function deployCloudRunStaticSitePipeline(
   service: string,
   region: string,
   repository: string,
-  gcpCredentials: Secret,
-  viteConfig: Secret,
-  options: CloudRunStaticSiteOptions = {},
+  gcpCredentials?: Secret,
+  viteConfig?: Secret,
+  options: CloudRunStaticSiteOptions & {
+    wifProvider?: string;
+    wifServiceAccount?: string;
+    wifOidcToken?: Secret;
+    wifAudience?: string;
+  } = {},
 ): Promise<string> {
+  if (!viteConfig) {
+    throw new Error("viteConfig is required for 'deploy' action");
+  }
   const dist = await buildStaticSiteDist(source, viteConfig, options);
   const imageRef = buildImageRef(projectId, service, region, repository, options);
   const runtimeContainer = createCloudRunRuntimeContainer(dist);
@@ -279,6 +346,9 @@ export async function deployCloudRunStaticSitePipeline(
     runtimeContainer,
     imageRef,
     gcpCredentials,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
   );
   const allowUnauthenticated = options.allowUnauthenticated ?? true;
 
@@ -305,6 +375,10 @@ export async function deployCloudRunStaticSitePipeline(
     dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
     gcpCredentials,
     projectId,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
+    options.wifAudience,
   ).withExec(cmd);
 
   return deployed
@@ -330,12 +404,20 @@ export async function deleteCloudRunService(
   projectId: string,
   service: string,
   region: string,
-  gcpCredentials: Secret,
+  gcpCredentials?: Secret,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
+  wifAudience = "",
 ): Promise<string> {
   return withCloudRunAuth(
     dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
     gcpCredentials,
     projectId,
+    wifProvider,
+    wifServiceAccount,
+    wifOidcToken,
+    wifAudience,
   )
     .withExec([
       "gcloud",

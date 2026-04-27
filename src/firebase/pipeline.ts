@@ -17,12 +17,16 @@ export type FirebaseDeployWebhostingOptions = {
   firebaseEnv?: string;
   firestoreDatabaseId?: string;
   functionsRegion?: string;
+  wifProvider?: string;
+  wifServiceAccount?: string;
+  wifOidcToken?: Secret;
+  wifAudience?: string;
 };
 
 export async function firebaseDeployWebhostingPipeline(
   source: Directory,
   projectId: string,
-  gcpCredentials: Secret,
+  gcpCredentials?: Secret,
   options: FirebaseDeployWebhostingOptions = {},
 ): Promise<string> {
   const installDirs = [options.frontendDir, options.backendDir].filter(
@@ -51,6 +55,10 @@ export async function firebaseDeployWebhostingPipeline(
     gcpCredentials,
     options.only,
     options.firebaseDir,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
+    options.wifAudience,
   );
 
   return deployed.stdout();

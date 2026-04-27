@@ -5,17 +5,14 @@ import { FIREBASE_WORKDIR, GCP_CREDENTIALS_PATH } from "./constants.js";
 export async function deployFirebaseWebhostingProject(
   source: Directory,
   projectId: string,
-  gcpCredentials: Secret,
+  gcpCredentials?: Secret,
   only?: string,
   firebaseDir?: string,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
+  wifAudience = "",
 ): Promise<Container> {
-  const creds = await gcpCredentials.plaintext();
-  if (!creds.trim().startsWith("{")) {
-    throw new Error(
-      "The gcpCredentials secret must be a GCP JSON credentials document.",
-    );
-  }
-
   const cmd = [
     "firebase",
     "deploy",
@@ -33,11 +30,51 @@ export async function deployFirebaseWebhostingProject(
     ? `${FIREBASE_WORKDIR}/${firebaseDir}`
     : FIREBASE_WORKDIR;
 
-  return firebaseCliBase()
+  let container = firebaseCliBase()
     .withDirectory(FIREBASE_WORKDIR, source)
-    .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
-    .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
-    .withoutEnvVariable("FIREBASE_TOKEN")
-    .withWorkdir(workdir)
-    .withExec(cmd);
+    .withWorkdir(workdir);
+
+  if (gcpCredentials) {
+    container = container
+      .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
+      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        GCP_CREDENTIALS_PATH,
+      )
+      .withoutEnvVariable("FIREBASE_TOKEN");
+  } else if (wifProvider && wifServiceAccount && wifOidcToken) {
+    const resolvedAudience =
+      wifAudience.trim() || `https://iam.googleapis.com/${wifProvider.trim()}`;
+    const credentialsPayload = JSON.stringify(
+      {
+        type: "external_account",
+        audience: resolvedAudience,
+        subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+        token_url: "https://sts.googleapis.com/v1/token",
+        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
+        credential_source: {
+          file: "/tmp/oidc-token.txt",
+        },
+      },
+      null,
+      2,
+    );
+
+    container = container
+      .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
+      .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
+      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json")
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        "/tmp/wif-credentials.json",
+      )
+      .withoutEnvVariable("FIREBASE_TOKEN");
+  } else {
+    throw new Error(
+      "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided.",
+    );
+  }
+
+  return container.withExec(cmd);
 }

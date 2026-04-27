@@ -336,14 +336,13 @@ export async function firebaseApphostingPipeline(
 
   const runtimeContainer = createCloudRunRuntimeContainer(dist);
 
-  if (!gcpCredentials) {
-    throw new Error("gcpCredentials secret is required for publishing images.");
-  }
-
   const publishedRef = await publishCloudRunContainer(
     runtimeContainer,
     imageRef,
     gcpCredentials,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
   );
 
   // 4. Deploy the image to Cloud Run (which powers the App Hosting backend)
@@ -370,6 +369,10 @@ export async function firebaseApphostingPipeline(
     dag.container().from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"),
     gcpCredentials,
     projectId,
+    options.wifProvider,
+    options.wifServiceAccount,
+    options.wifOidcToken,
+    options.wifAudience,
   ).withExec(deployCmd);
 
   return deployer

@@ -366,7 +366,7 @@ export class StaydevopsTs {
     service: string,
     region: string,
     repository: string,
-    gcpCredentials: Secret,
+    gcpCredentials?: Secret,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source?: Directory,
     viteConfig?: Secret,
@@ -379,6 +379,10 @@ export class StaydevopsTs {
     registryScope = "staytunedllp",
     allowUnauthenticated = true,
     registryRegion = "",
+    wifProvider = "",
+    wifServiceAccount = "",
+    wifOidcToken?: Secret,
+    wifAudience = "",
   ): Promise<string> {
     if (action === "deploy") {
       if (!source) {
@@ -405,6 +409,10 @@ export class StaydevopsTs {
           registryScope,
           allowUnauthenticated,
           registryRegion,
+          wifProvider,
+          wifServiceAccount,
+          wifOidcToken,
+          wifAudience,
         },
       );
     }
@@ -415,6 +423,10 @@ export class StaydevopsTs {
         service,
         region,
         gcpCredentials,
+        wifProvider,
+        wifServiceAccount,
+        wifOidcToken,
+        wifAudience,
       );
     }
 
@@ -433,7 +445,7 @@ export class StaydevopsTs {
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
     projectId: string,
-    gcpCredentials: Secret,
+    gcpCredentials?: Secret,
     appId?: string,
     only?: string,
     frontendDir?: string,
@@ -446,6 +458,10 @@ export class StaydevopsTs {
     firebaseEnv?: string,
     firestoreDatabaseId?: string,
     functionsRegion?: string,
+    wifProvider = "",
+    wifServiceAccount = "",
+    wifOidcToken?: Secret,
+    wifAudience = "",
   ): Promise<string> {
     return firebaseDeployWebhostingPipeline(source, projectId, gcpCredentials, {
       appId,
@@ -460,6 +476,10 @@ export class StaydevopsTs {
       firebaseEnv,
       firestoreDatabaseId,
       functionsRegion,
+      wifProvider,
+      wifServiceAccount,
+      wifOidcToken,
+      wifAudience,
     });
   }
 
