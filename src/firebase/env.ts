@@ -23,8 +23,6 @@ export async function withFrontendEnv(
     return container;
   }
 
-  const frontendWorkdir = `${FIREBASE_WORKDIR}/${options.frontendDir}`;
-
   // Derive environment values as per the reference YAML logic
   const envPrefix = options.targetEnv?.split("-")[0] || "dev";
   const firebaseEnv =
@@ -55,7 +53,6 @@ export async function withFrontendEnv(
   const iamGraphqlUrl = `${functionBaseUrl}/iam_graphql`;
 
   let configured = container
-    .withWorkdir(frontendWorkdir)
     .withEnvVariable("VITE_FIREBASE_PROJECT_ID", options.projectId)
     .withEnvVariable("FIREBASE_ENV", firebaseEnv)
     .withEnvVariable("FIRESTORE_DATABASE_ID", firestoreDatabaseId)
@@ -68,11 +65,10 @@ export async function withFrontendEnv(
     configured = configured.withEnvVariable("VITE_FIREBASE_APP_ID", options.appId);
   }
 
-  // Parse webappConfig if provided
+  // Inject Webapp Config
   if (options.webappConfig) {
+    // We parse it in TypeScript to extract mapped keys
     const rawConfig = await options.webappConfig.plaintext();
-    configured = configured.withEnvVariable("VITE_FIREBASE_WEBAPP_CONFIG", rawConfig.trim());
-    
     try {
       const trimmed = rawConfig.trim();
       let parsed: any;
@@ -99,33 +95,29 @@ export async function withFrontendEnv(
       for (const [configKey, envKey] of Object.entries(mapping)) {
         const value = parsed[configKey];
         if (typeof value === "string" && value.trim().length > 0) {
+          // Use withEnvVariable but we could also use withSecretVariable if we want to mask individual keys
+          // Given the user's concern about visibility, we'll just set them
           configured = configured.withEnvVariable(envKey, value.trim());
         }
       }
     } catch (e) {
-      console.warn("Failed to parse webappConfig as JSON in Dagger module");
+      // Ignore parse errors
     }
   }
 
-  // Handle extraEnv
   if (options.extraEnv) {
-    const rawExtra = await options.extraEnv.plaintext();
-    const lines = rawExtra.split("\n").filter(l => l.trim() && !l.startsWith("#"));
-    for (const line of lines) {
-      const firstEq = line.indexOf("=");
-      if (firstEq !== -1) {
-        const key = line.substring(0, firstEq).trim();
-        const value = line.substring(firstEq + 1).trim();
-        configured = configured.withEnvVariable(key, value);
-      }
-    }
+    configured = configured.withSecretVariable("EXTRA_ENV_SECRET", options.extraEnv);
   }
 
-  // Still write to .env for tools that strictly need it
+  // Write .env in the CURRENT directory (staying in caller's context like /workspace)
   return configured.withExec([
     "bash",
     "-lc",
-    "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
+    [
+      STRICT_SHELL_HEADER,
+      "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
+      "if [ -n \"$EXTRA_ENV_SECRET\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
+    ].join("\n"),
   ]);
 }
 
