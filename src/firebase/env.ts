@@ -110,13 +110,29 @@ export async function withFrontendEnv(
   }
 
   // Write .env in the CURRENT directory (staying in caller's context like /workspace)
-  // Note: Dagger will mask the secret values in the logs even during this bash script
+  // Note: Dagger will mask the secret values in the logs even during this bash script.
+  // We must explicitly echo the VITE_ keys because 'env' hides secret variables.
+  const firebaseKeys = [
+    "VITE_FIREBASE_API_KEY",
+    "VITE_FIREBASE_AUTH_DOMAIN",
+    "VITE_FIREBASE_PROJECT_ID",
+    "VITE_FIREBASE_STORAGE_BUCKET",
+    "VITE_FIREBASE_MESSAGING_SENDER_ID",
+    "VITE_FIREBASE_APP_ID",
+    "VITE_FIREBASE_MEASUREMENT_ID",
+  ];
+
+  const echoCommands = firebaseKeys.map(
+    (k) => `if [ -n "\${${k}:-}" ]; then echo "${k}=\$${k}" >> .env; fi`,
+  );
+
   return configured.withExec([
     "bash",
     "-lc",
     [
       STRICT_SHELL_HEADER,
       "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
+      ...echoCommands,
       "if [ -n \"${EXTRA_ENV_SECRET:-}\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
     ].join("\n"),
   ]);
