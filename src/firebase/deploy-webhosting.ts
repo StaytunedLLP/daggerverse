@@ -67,9 +67,19 @@ export async function deployFirebaseWebhostingProject(
       .from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim")
       .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
       .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
-      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json");
+      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json")
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        "/tmp/wif-credentials.json",
+      );
 
     const accessToken = await tokenContainer
+      .withExec([
+        "gcloud",
+        "auth",
+        "login",
+        "--cred-file=/tmp/wif-credentials.json",
+      ])
       .withExec(["gcloud", "auth", "print-access-token"])
       .stdout();
 

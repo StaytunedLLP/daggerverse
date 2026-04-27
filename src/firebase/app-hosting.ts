@@ -88,9 +88,19 @@ async function withAppHostingAuth(
       .withEnvVariable(
         "GOOGLE_APPLICATION_CREDENTIALS",
         FIREBASE_WIF_CREDENTIALS_PATH,
+      )
+      .withEnvVariable(
+        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+        FIREBASE_WIF_CREDENTIALS_PATH,
       );
 
     const accessToken = await tokenContainer
+      .withExec([
+        "gcloud",
+        "auth",
+        "login",
+        `--cred-file=${FIREBASE_WIF_CREDENTIALS_PATH}`,
+      ])
       .withExec(["gcloud", "auth", "print-access-token"])
       .stdout();
 
