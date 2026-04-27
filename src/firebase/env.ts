@@ -146,7 +146,7 @@ export async function withFrontendEnv(
     console.log(`📝 Writing .env file to ${options.frontendDir || 'root'}...`);
     return configured
       .withNewFile(".env", envContent)
-      .withExec(["bash", "-c", "echo '--- .env check ---' && ls -l .env && head -n 5 .env | sed 's/=.*/=/******/ '"]);
+      .withExec(["bash", "-c", "echo '--- .env check ---' && ls -l .env && head -n 5 .env | sed 's|=.*|=/******/ '"]);
   }
 
   return configured;
