@@ -23,7 +23,7 @@ export async function buildFirebaseProjects(
   let container = firebaseNodeBase().withDirectory(FIREBASE_WORKDIR, source);
 
   if (options.frontendDir && options.projectId) {
-    container = withFrontendEnv(container, {
+    container = await withFrontendEnv(container, {
       frontendDir: options.frontendDir,
       projectId: options.projectId,
       appId: options.appId,

@@ -213,7 +213,7 @@ export async function deployFirebaseApphostingProject(
     );
 
   // Apply environment mapping if requested
-  prepared = withFrontendEnv(prepared, {
+  prepared = await withFrontendEnv(prepared, {
     frontendDir: rootDir,
     projectId,
     appId,
@@ -318,7 +318,7 @@ async function buildApphostingDist(
   });
 
   // Apply environment mapping (This is where .env is created)
-  container = withFrontendEnv(container, {
+  container = await withFrontendEnv(container, {
     ...options,
     projectId,
     frontendDir: rootDir,
