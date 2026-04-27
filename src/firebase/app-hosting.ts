@@ -325,10 +325,14 @@ async function buildApphostingDist(
   });
 
   // Run build
-  container = runNpmScript(container, buildScript, {
-    cwd: rootDir,
-    workspace: DEFAULT_WORKSPACE,
-  });
+  container = runNpmScript(
+    container.withEnvVariable("CACHE_BUST", Date.now().toString()),
+    buildScript,
+    {
+      cwd: rootDir,
+      workspace: DEFAULT_WORKSPACE,
+    }
+  );
 
   const distPath = resolveWorkspacePath(DEFAULT_WORKSPACE, distDir);
   return container.directory(distPath);
