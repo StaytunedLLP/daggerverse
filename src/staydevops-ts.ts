@@ -500,6 +500,7 @@ export class StaydevopsTs {
     appId = "",
     region = "asia-southeast1",
     gcpCredentials?: Secret,
+    gcpToken?: Secret,
     wifProvider = "",
     wifServiceAccount = "",
     wifOidcToken?: Secret,
@@ -542,6 +543,7 @@ export class StaydevopsTs {
           buildScript,
           distDir,
           imageTag,
+          gcpToken,
           nodeAuthToken,
           registryScope,
         },
@@ -557,6 +559,7 @@ export class StaydevopsTs {
         wifServiceAccount,
         wifOidcToken,
         wifAudience,
+        gcpToken,
       );
     }
 

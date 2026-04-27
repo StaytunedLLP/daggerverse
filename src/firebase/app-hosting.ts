@@ -24,6 +24,7 @@ import { createNodeWorkspace } from "../shared/workspace.js";
 
 export type FirebaseDeployApphostingOptions = {
   gcpCredentials?: Secret;
+  gcpToken?: Secret;
   wifProvider?: string;
   wifServiceAccount?: string;
   wifOidcToken?: Secret;
@@ -49,41 +50,61 @@ async function withAppHostingAuth(
   wifServiceAccount = "",
   wifOidcToken?: Secret,
   wifAudience = "",
+  gcpToken?: Secret,
 ): Promise<Container> {
-  if (gcpCredentials) {
+  if (gcpToken) {
+    const token = await gcpToken.plaintext();
     return container
-      .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
-      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
-      .withEnvVariable(
-        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        GCP_CREDENTIALS_PATH,
-      )
+      .withEnvVariable("GOOGLE_OAUTH_ACCESS_TOKEN", token)
       .withoutEnvVariable("FIREBASE_TOKEN");
   }
 
-  if (wifProvider && wifServiceAccount && wifOidcToken) {
+  let isWif = false;
+  if (gcpCredentials) {
+    const credentials = await gcpCredentials.plaintext();
+    if (credentials.includes("external_account")) {
+      isWif = true;
+    } else {
+      return container
+        .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
+        .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", GCP_CREDENTIALS_PATH)
+        .withEnvVariable(
+          "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+          GCP_CREDENTIALS_PATH,
+        )
+        .withoutEnvVariable("FIREBASE_TOKEN");
+    }
+  }
+
+  if (isWif || (wifProvider && wifServiceAccount && wifOidcToken)) {
     const resolvedAudience =
       wifAudience.trim() || `//iam.googleapis.com/${wifProvider.trim()}`;
-    const credentialsPayload = JSON.stringify(
-      {
-        type: "external_account",
-        audience: resolvedAudience,
-        subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-        token_url: "https://sts.googleapis.com/v1/token",
-        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
-        credential_source: {
-          file: FIREBASE_WIF_OIDC_TOKEN_PATH,
-        },
-      },
-      null,
-      2,
-    );
+    const credentialsPayload =
+      isWif && gcpCredentials
+        ? await gcpCredentials.plaintext()
+        : JSON.stringify(
+            {
+              type: "external_account",
+              audience: resolvedAudience,
+              subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+              token_url: "https://sts.googleapis.com/v1/token",
+              service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
+              credential_source: {
+                file: FIREBASE_WIF_OIDC_TOKEN_PATH,
+              },
+            },
+            null,
+            2,
+          );
 
     // Exchange OIDC token for a real access token using gcloud
     const tokenContainer = dag
       .container()
       .from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim")
-      .withMountedSecret(FIREBASE_WIF_OIDC_TOKEN_PATH, wifOidcToken)
+      .withMountedSecret(
+        FIREBASE_WIF_OIDC_TOKEN_PATH,
+        wifOidcToken ?? dag.setSecret("dummy", ""),
+      )
       .withNewFile(FIREBASE_WIF_CREDENTIALS_PATH, `${credentialsPayload}\n`)
       .withEnvVariable(
         "GOOGLE_APPLICATION_CREDENTIALS",
@@ -92,32 +113,24 @@ async function withAppHostingAuth(
       .withEnvVariable(
         "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
         FIREBASE_WIF_CREDENTIALS_PATH,
-      );
-
-    const accessToken = await tokenContainer
+      )
       .withExec([
         "gcloud",
         "auth",
         "login",
         `--cred-file=${FIREBASE_WIF_CREDENTIALS_PATH}`,
-      ])
+      ]);
+
+    const accessToken = await tokenContainer
       .withExec(["gcloud", "auth", "print-access-token"])
       .stdout();
 
     return container
-      .withMountedSecret(FIREBASE_WIF_OIDC_TOKEN_PATH, wifOidcToken)
-      .withNewFile(FIREBASE_WIF_CREDENTIALS_PATH, `${credentialsPayload}\n`)
-      .withEnvVariable(
-        "GOOGLE_APPLICATION_CREDENTIALS",
-        FIREBASE_WIF_CREDENTIALS_PATH,
-      )
-      .withSecretVariable("GOOGLE_OAUTH_ACCESS_TOKEN", dag.setSecret("fb-access-token", accessToken))
+      .withEnvVariable("GOOGLE_OAUTH_ACCESS_TOKEN", accessToken.trim())
       .withoutEnvVariable("FIREBASE_TOKEN");
   }
 
-  throw new Error(
-    "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided.",
-  );
+  return container;
 }
 
 function appHostingConfig(backendId: string, rootDir: string): string {
@@ -187,6 +200,7 @@ export async function deployFirebaseApphostingProject(
   firebaseEnv?: string,
   firestoreDatabaseId?: string,
   functionsRegion?: string,
+  gcpToken?: Secret,
 ): Promise<string> {
   let prepared = firebaseAppHostingBase()
     .withDirectory(FIREBASE_WORKDIR, source)
@@ -216,6 +230,7 @@ export async function deployFirebaseApphostingProject(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
+    gcpToken,
   );
   
   const authenticatedWithExec = authenticated.withExec(backendExistsCommand(projectId, backendId, appId, region));
@@ -249,6 +264,7 @@ export async function deleteFirebaseApphostingBackend(
   wifServiceAccount = "",
   wifOidcToken?: Secret,
   wifAudience = "",
+  gcpToken?: Secret,
 ): Promise<string> {
   const container = await withAppHostingAuth(
     firebaseAppHostingBase(),
@@ -257,6 +273,7 @@ export async function deleteFirebaseApphostingBackend(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
+    gcpToken,
   );
 
   return container
@@ -346,6 +363,7 @@ export async function firebaseApphostingPipeline(
     options.firebaseEnv,
     options.firestoreDatabaseId,
     options.functionsRegion,
+    options.gcpToken,
   );
 
   // 2. Build the distribution with correct ENVs

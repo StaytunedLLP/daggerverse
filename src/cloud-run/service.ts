@@ -209,44 +209,55 @@ export async function withCloudRunAuth(
 ): Promise<Container> {
   let authContainer = container;
 
+  let isWif = false;
   if (gcpCredentials) {
-    authContainer = authContainer
-      .withMountedSecret(CLOUD_RUN_CREDENTIALS_PATH, gcpCredentials)
-      .withEnvVariable(
-        "GOOGLE_APPLICATION_CREDENTIALS",
-        CLOUD_RUN_CREDENTIALS_PATH,
-      )
-      .withEnvVariable(
-        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        CLOUD_RUN_CREDENTIALS_PATH,
-      )
-      .withExec([
-        "gcloud",
-        "auth",
-        "activate-service-account",
-        "--key-file",
-        CLOUD_RUN_CREDENTIALS_PATH,
-      ]);
-  } else if (wifProvider && wifServiceAccount && wifOidcToken) {
+    const credentials = await gcpCredentials.plaintext();
+    if (credentials.includes("external_account")) {
+      isWif = true;
+    } else {
+      authContainer = authContainer
+        .withMountedSecret(CLOUD_RUN_CREDENTIALS_PATH, gcpCredentials)
+        .withEnvVariable(
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          CLOUD_RUN_CREDENTIALS_PATH,
+        )
+        .withEnvVariable(
+          "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+          CLOUD_RUN_CREDENTIALS_PATH,
+        )
+        .withExec([
+          "gcloud",
+          "auth",
+          "activate-service-account",
+          "--key-file",
+          CLOUD_RUN_CREDENTIALS_PATH,
+        ]);
+    }
+  }
+
+  if (isWif || (wifProvider && wifServiceAccount && wifOidcToken)) {
     const resolvedAudience =
       wifAudience.trim() || `//iam.googleapis.com/${wifProvider.trim()}`;
-    const credentialsPayload = JSON.stringify(
-      {
-        type: "external_account",
-        audience: resolvedAudience,
-        subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-        token_url: "https://sts.googleapis.com/v1/token",
-        service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
-        credential_source: {
-          file: "/tmp/oidc-token.txt",
-        },
-      },
-      null,
-      2,
-    );
+    const credentialsPayload =
+      isWif && gcpCredentials
+        ? await gcpCredentials.plaintext()
+        : JSON.stringify(
+            {
+              type: "external_account",
+              audience: resolvedAudience,
+              subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+              token_url: "https://sts.googleapis.com/v1/token",
+              service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${wifServiceAccount}:generateAccessToken`,
+              credential_source: {
+                file: "/tmp/oidc-token.txt",
+              },
+            },
+            null,
+            2,
+          );
 
     authContainer = authContainer
-      .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
+      .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken ?? dag.setSecret("dummy", ""))
       .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
       .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json")
       .withEnvVariable(
