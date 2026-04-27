@@ -1,4 +1,4 @@
-import { Container, Secret } from "@dagger.io/dagger";
+import { Container, Secret, dag } from "@dagger.io/dagger";
 import { STRICT_SHELL_HEADER } from "../shared/constants.js";
 import { shellQuote } from "../shared/path-utils.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
@@ -95,9 +95,9 @@ export async function withFrontendEnv(
       for (const [configKey, envKey] of Object.entries(mapping)) {
         const value = parsed[configKey];
         if (typeof value === "string" && value.trim().length > 0) {
-          // Use withEnvVariable but we could also use withSecretVariable if we want to mask individual keys
-          // Given the user's concern about visibility, we'll just set them
-          configured = configured.withEnvVariable(envKey, value.trim());
+          // Convert the string to a Dagger Secret to MASK it in logs
+          const secret = dag.setSecret(envKey, value.trim());
+          configured = configured.withSecretVariable(envKey, secret);
         }
       }
     } catch (e) {
@@ -110,6 +110,7 @@ export async function withFrontendEnv(
   }
 
   // Write .env in the CURRENT directory (staying in caller's context like /workspace)
+  // Note: Dagger will mask the secret values in the logs even during this bash script
   return configured.withExec([
     "bash",
     "-lc",
