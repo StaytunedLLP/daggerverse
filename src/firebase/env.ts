@@ -69,6 +69,12 @@ export async function withFrontendEnv(
   if (options.webappConfig) {
     // We parse it in TypeScript to extract mapped keys
     const rawConfig = await options.webappConfig.plaintext();
+    const crypto = await import('crypto');
+    configured = configured.withEnvVariable(
+      "FIREBASE_CONFIG_HASH",
+      crypto.createHash("sha256").update(rawConfig).digest("hex")
+    );
+    
     const trimmed = rawConfig.trim();
     let parsed: any;
     
