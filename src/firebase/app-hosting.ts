@@ -62,7 +62,8 @@ async function withAppHostingAuth(
   }
 
   if (wifProvider && wifServiceAccount && wifOidcToken) {
-    const resolvedAudience = wifAudience.trim() || wifProvider.trim();
+    const resolvedAudience =
+      wifAudience.trim() || `//iam.googleapis.com/${wifProvider.trim()}`;
     const credentialsPayload = JSON.stringify(
       {
         type: "external_account",
