@@ -1,0 +1,131 @@
+name: Cloud Run PR Preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  deployments: write
+  pull-requests: write
+
+concurrency:
+  group: cloud-run-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  APP_SOURCE_DIR: ${{ vars.APP_SOURCE_DIR }}
+  CLOUD_RUN_REGION: ${{ vars.CLOUD_RUN_REGION }}
+  CLOUD_RUN_REPOSITORY: ${{ vars.CLOUD_RUN_REPOSITORY }}
+  CLOUD_RUN_SERVICE_PREFIX: ${{ vars.CLOUD_RUN_SERVICE_PREFIX }}
+  CLOUD_RUN_SERVICE_SUFFIX: ${{ vars.CLOUD_RUN_SERVICE_SUFFIX }}
+
+jobs:
+  deploy-pr:
+    if: ${{ github.event.action != 'closed' }}
+    runs-on: st-arc
+    environment: dev-karmodharmo-com
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          [[ -n "${{ secrets.WIF_PROVIDER }}" ]] || { echo "Missing WIF_PROVIDER"; exit 1; }
+          [[ -n "${{ secrets.WIF_SERVICE_ACCOUNT }}" ]] || { echo "Missing WIF_SERVICE_ACCOUNT"; exit 1; }
+          [[ -n "${{ secrets.FIREBASE_PROJECT_ID }}" ]] || { echo "Missing FIREBASE_PROJECT_ID"; exit 1; }
+          [[ -n "${{ secrets.VITE_CONFIG }}" ]] || { echo "Missing VITE_CONFIG"; exit 1; }
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Bootstrap Dagger
+        uses: staytunedllp/staydevops-ts/.github/actions/dagger-bootstrap@main
+        with:
+          namespace: dagger
+          label_selector: name=dagger-engine
+          prefer_same_node: "false"
+
+      - name: Deploy PR preview service
+        env:
+          VITE_CONFIG: ${{ secrets.VITE_CONFIG }}
+        run: |
+          set -euo pipefail
+
+          module_ref="github.com/${{ github.event.pull_request.head.repo.full_name }}@${{ github.event.pull_request.head.sha }}"
+          source_dir="${APP_SOURCE_DIR:-.}"
+          region="${CLOUD_RUN_REGION:-asia-southeast1}"
+          repository="${CLOUD_RUN_REPOSITORY:-preview-images}"
+          service_prefix="${CLOUD_RUN_SERVICE_PREFIX:-pr}"
+          service_suffix="${CLOUD_RUN_SERVICE_SUFFIX:-}"
+          service="${service_prefix}-${{ github.event.pull_request.number }}"
+
+          if [[ -n "${service_suffix}" ]]; then
+            service="${service}-${service_suffix}"
+          fi
+
+          dagger call -m "${module_ref}" cloud-run-static-site \
+            --action deploy \
+            --source="${source_dir}" \
+            --project-id="${{ secrets.FIREBASE_PROJECT_ID }}" \
+            --service="${service}" \
+            --region="${region}" \
+            --repository="${repository}" \
+            --gcp-credentials="file:${{ steps.auth.outputs.credentials_file_path }}" \
+            --vite-config=env:VITE_CONFIG
+
+  cleanup-pr:
+    if: ${{ github.event.action == 'closed' }}
+    runs-on: st-arc
+    environment: dev-karmodharmo-com
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Bootstrap Dagger
+        uses: staytunedllp/staydevops-ts/.github/actions/dagger-bootstrap@main
+        with:
+          namespace: dagger
+          label_selector: name=dagger-engine
+          prefer_same_node: "false"
+
+      - name: Delete PR preview service
+        run: |
+          set -euo pipefail
+
+          module_ref="github.com/${{ github.event.pull_request.head.repo.full_name }}@${{ github.event.pull_request.head.sha }}"
+          region="${CLOUD_RUN_REGION:-asia-southeast1}"
+          repository="${CLOUD_RUN_REPOSITORY:-preview-images}"
+          service_prefix="${CLOUD_RUN_SERVICE_PREFIX:-pr}"
+          service_suffix="${CLOUD_RUN_SERVICE_SUFFIX:-}"
+          service="${service_prefix}-${{ github.event.pull_request.number }}"
+
+          if [[ -n "${service_suffix}" ]]; then
+            service="${service}-${service_suffix}"
+          fi
+
+          dagger call -m "${module_ref}" cloud-run-static-site \
+            --action delete \
+            --project-id="${{ secrets.FIREBASE_PROJECT_ID }}" \
+            --service="${service}" \
+            --region="${region}" \
+            --repository="${repository}" \
+            --gcp-credentials="file:${{ steps.auth.outputs.credentials_file_path }}"

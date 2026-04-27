@@ -42,14 +42,14 @@ export type FirebaseDeployApphostingOptions = {
   functionsRegion?: string;
 };
 
-function withAppHostingAuth(
+async function withAppHostingAuth(
   container: Container,
   gcpCredentials?: Secret,
   wifProvider = "",
   wifServiceAccount = "",
   wifOidcToken?: Secret,
   wifAudience = "",
-): Container {
+): Promise<Container> {
   if (gcpCredentials) {
     return container
       .withMountedSecret(GCP_CREDENTIALS_PATH, gcpCredentials)
@@ -79,6 +79,21 @@ function withAppHostingAuth(
       2,
     );
 
+    // Exchange OIDC token for a real access token using gcloud
+    const tokenContainer = dag
+      .container()
+      .from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim")
+      .withMountedSecret(FIREBASE_WIF_OIDC_TOKEN_PATH, wifOidcToken)
+      .withNewFile(FIREBASE_WIF_CREDENTIALS_PATH, `${credentialsPayload}\n`)
+      .withEnvVariable(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        FIREBASE_WIF_CREDENTIALS_PATH,
+      );
+
+    const accessToken = await tokenContainer
+      .withExec(["gcloud", "auth", "print-access-token"])
+      .stdout();
+
     return container
       .withMountedSecret(FIREBASE_WIF_OIDC_TOKEN_PATH, wifOidcToken)
       .withNewFile(FIREBASE_WIF_CREDENTIALS_PATH, `${credentialsPayload}\n`)
@@ -86,10 +101,7 @@ function withAppHostingAuth(
         "GOOGLE_APPLICATION_CREDENTIALS",
         FIREBASE_WIF_CREDENTIALS_PATH,
       )
-      .withEnvVariable(
-        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        FIREBASE_WIF_CREDENTIALS_PATH,
-      )
+      .withSecretVariable("GOOGLE_OAUTH_ACCESS_TOKEN", dag.setSecret("fb-access-token", accessToken))
       .withoutEnvVariable("FIREBASE_TOKEN");
   }
 
@@ -187,16 +199,18 @@ export async function deployFirebaseApphostingProject(
     functionsRegion,
   });
 
-  const authenticated = withAppHostingAuth(
+  const authenticated = await withAppHostingAuth(
     prepared,
     gcpCredentials,
     wifProvider,
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
-  ).withExec(backendExistsCommand(projectId, backendId, appId, region));
+  );
+  
+  const authenticatedWithExec = authenticated.withExec(backendExistsCommand(projectId, backendId, appId, region));
 
-  const backendJson = await authenticated
+  const backendJson = await authenticatedWithExec
     .withExec([
       "firebase",
       "apphosting:backends:get",
@@ -226,7 +240,7 @@ export async function deleteFirebaseApphostingBackend(
   wifOidcToken?: Secret,
   wifAudience = "",
 ): Promise<string> {
-  const container = withAppHostingAuth(
+  const container = await withAppHostingAuth(
     firebaseAppHostingBase(),
     gcpCredentials,
     wifProvider,
@@ -365,17 +379,17 @@ export async function firebaseApphostingPipeline(
     "--allow-unauthenticated",
   ];
 
-  const deployer = withCloudRunAuth(
+  const deployer = await withAppHostingAuth(
     dag.container().from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"),
     gcpCredentials,
-    projectId,
-    options.wifProvider,
-    options.wifServiceAccount,
+    options.wifProvider ?? "",
+    options.wifServiceAccount ?? "",
     options.wifOidcToken,
-    options.wifAudience,
-  ).withExec(deployCmd);
+    options.wifAudience ?? "",
+  );
 
   return deployer
+    .withExec(deployCmd)
     .withExec([
       "gcloud",
       "run",

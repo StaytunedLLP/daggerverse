@@ -1,4 +1,4 @@
-import { Container, Directory, Secret } from "@dagger.io/dagger";
+import { Container, Directory, Secret, dag } from "@dagger.io/dagger";
 import { firebaseCliBase } from "./base.js";
 import { FIREBASE_WORKDIR, GCP_CREDENTIALS_PATH } from "./constants.js";
 
@@ -61,14 +61,23 @@ export async function deployFirebaseWebhostingProject(
       2,
     );
 
+    // Exchange OIDC token for a real access token using gcloud
+    const tokenContainer = dag
+      .container()
+      .from("gcr.io/google.com/cloudsdktool/google-cloud-cli:slim")
+      .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
+      .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
+      .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json");
+
+    const accessToken = await tokenContainer
+      .withExec(["gcloud", "auth", "print-access-token"])
+      .stdout();
+
     container = container
       .withMountedSecret("/tmp/oidc-token.txt", wifOidcToken)
       .withNewFile("/tmp/wif-credentials.json", `${credentialsPayload}\n`)
       .withEnvVariable("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/wif-credentials.json")
-      .withEnvVariable(
-        "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        "/tmp/wif-credentials.json",
-      )
+      .withSecretVariable("GOOGLE_OAUTH_ACCESS_TOKEN", dag.setSecret("fb-hosting-access-token", accessToken))
       .withoutEnvVariable("FIREBASE_TOKEN");
   } else {
     throw new Error(
