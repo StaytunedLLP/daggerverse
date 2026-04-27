@@ -56,7 +56,7 @@ async function withAppHostingAuth(
     const token = await gcpToken.plaintext();
     return container
       .withEnvVariable("GOOGLE_OAUTH_ACCESS_TOKEN", token)
-      .withoutEnvVariable("FIREBASE_TOKEN");
+      .withEnvVariable("FIREBASE_TOKEN", token);
   }
 
   let isWif = false;
@@ -127,7 +127,7 @@ async function withAppHostingAuth(
 
     return container
       .withEnvVariable("GOOGLE_OAUTH_ACCESS_TOKEN", accessToken.trim())
-      .withoutEnvVariable("FIREBASE_TOKEN");
+      .withEnvVariable("FIREBASE_TOKEN", accessToken.trim());
   }
 
   return container;
