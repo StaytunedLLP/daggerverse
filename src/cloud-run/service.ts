@@ -148,20 +148,27 @@ export async function publishCloudRunContainer(
 ): Promise<string> {
   const registryAddress = registryAddressFromImageRef(imageRef);
   let username = "";
-  let passwordSecret: Secret;
+  let passwordSecret: Secret | undefined = undefined;
 
+  let isWif = false;
   if (gcpCredentials) {
     const credentials = await gcpCredentials.plaintext();
-    username = CLOUD_RUN_REGISTRY_USERNAME;
-    passwordSecret = dag.setSecret(
-      "artifact-registry-password",
-      Buffer.from(credentials, "utf8").toString("base64"),
-    );
-  } else if (wifProvider && wifServiceAccount && wifOidcToken) {
+    if (credentials.includes("external_account")) {
+      isWif = true;
+    } else {
+      username = CLOUD_RUN_REGISTRY_USERNAME;
+      passwordSecret = dag.setSecret(
+        "artifact-registry-password",
+        Buffer.from(credentials, "utf8").toString("base64"),
+      );
+    }
+  }
+
+  if (isWif || (wifProvider && wifServiceAccount && wifOidcToken)) {
     // Exchange OIDC token for GCP access token
     const tokenContainer = await withCloudRunAuth(
       dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
-      undefined,
+      gcpCredentials,
       "dummy-project",
       wifProvider,
       wifServiceAccount,
@@ -176,10 +183,14 @@ export async function publishCloudRunContainer(
       "artifact-registry-access-token",
       accessToken.trim(),
     );
-  } else {
+  } else if (!gcpCredentials) {
     throw new Error(
       "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided for publishing.",
     );
+  }
+
+  if (!passwordSecret) {
+    throw new Error("Failed to resolve registry credentials.");
   }
 
   return container
