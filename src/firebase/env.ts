@@ -69,39 +69,51 @@ export async function withFrontendEnv(
   if (options.webappConfig) {
     // We parse it in TypeScript to extract mapped keys
     const rawConfig = await options.webappConfig.plaintext();
+    const trimmed = rawConfig.trim();
+    let parsed: any;
+    
     try {
-      const trimmed = rawConfig.trim();
-      let parsed: any;
       try {
         parsed = JSON.parse(trimmed);
       } catch {
+        // Attempt to fix unquoted keys or single quotes
         const fixed = trimmed
           .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
           .replace(/'/g, '"')
           .replace(/,\s*([}\]])/g, "$1");
         parsed = JSON.parse(fixed);
       }
-
-      const mapping: Record<string, string> = {
-        apiKey: "VITE_FIREBASE_API_KEY",
-        authDomain: "VITE_FIREBASE_AUTH_DOMAIN",
-        projectId: "VITE_FIREBASE_PROJECT_ID",
-        storageBucket: "VITE_FIREBASE_STORAGE_BUCKET",
-        messagingSenderId: "VITE_FIREBASE_MESSAGING_SENDER_ID",
-        appId: "VITE_FIREBASE_APP_ID",
-        measurementId: "VITE_FIREBASE_MEASUREMENT_ID",
-      };
-
-      for (const [configKey, envKey] of Object.entries(mapping)) {
-        const value = parsed[configKey];
-        if (typeof value === "string" && value.trim().length > 0) {
-          // Convert the string to a Dagger Secret to MASK it in logs
-          const secret = dag.setSecret(envKey, value.trim());
-          configured = configured.withSecretVariable(envKey, secret);
-        }
-      }
     } catch (e) {
-      // Ignore parse errors
+      throw new Error(`❌ FIREBASE_WEBAPP_CONFIG contains invalid JSON. Please check the secret format. Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error(`❌ FIREBASE_WEBAPP_CONFIG parsed to an invalid type. Expected an object.`);
+    }
+
+    if (!parsed.apiKey || typeof parsed.apiKey !== "string" || parsed.apiKey.trim().length === 0) {
+      throw new Error(`❌ FIREBASE_WEBAPP_CONFIG is missing the required 'apiKey' field! Build cannot continue.`);
+    }
+
+    console.log(`✅ Successfully parsed FIREBASE_WEBAPP_CONFIG. Keys found: ${Object.keys(parsed).join(', ')}`);
+
+    const mapping: Record<string, string> = {
+      apiKey: "VITE_FIREBASE_API_KEY",
+      authDomain: "VITE_FIREBASE_AUTH_DOMAIN",
+      projectId: "VITE_FIREBASE_PROJECT_ID",
+      storageBucket: "VITE_FIREBASE_STORAGE_BUCKET",
+      messagingSenderId: "VITE_FIREBASE_MESSAGING_SENDER_ID",
+      appId: "VITE_FIREBASE_APP_ID",
+      measurementId: "VITE_FIREBASE_MEASUREMENT_ID",
+    };
+
+    for (const [configKey, envKey] of Object.entries(mapping)) {
+      const value = parsed[configKey];
+      if (typeof value === "string" && value.trim().length > 0) {
+        // Convert the string to a Dagger Secret to MASK it in logs
+        const secret = dag.setSecret(envKey, value.trim());
+        configured = configured.withSecretVariable(envKey, secret);
+      }
     }
   }
 
