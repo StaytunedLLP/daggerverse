@@ -159,7 +159,7 @@ export async function publishCloudRunContainer(
     );
   } else if (wifProvider && wifServiceAccount && wifOidcToken) {
     // Exchange OIDC token for GCP access token
-    const tokenContainer = withCloudRunAuth(
+    const tokenContainer = await withCloudRunAuth(
       dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
       undefined,
       "dummy-project",
@@ -187,7 +187,7 @@ export async function publishCloudRunContainer(
     .publish(imageRef);
 }
 
-export function withCloudRunAuth(
+export async function withCloudRunAuth(
   container: Container,
   gcpCredentials?: Secret,
   projectId?: string,
@@ -195,7 +195,7 @@ export function withCloudRunAuth(
   wifServiceAccount = "",
   wifOidcToken?: Secret,
   wifAudience = "",
-): Container {
+): Promise<Container> {
   let authContainer = container;
 
   if (gcpCredentials) {
@@ -218,7 +218,7 @@ export function withCloudRunAuth(
       ]);
   } else if (wifProvider && wifServiceAccount && wifOidcToken) {
     const resolvedAudience =
-      wifAudience.trim() || `https://iam.googleapis.com/${wifProvider.trim()}`;
+      wifAudience.trim() || `//iam.googleapis.com/${wifProvider.trim()}`;
     const credentialsPayload = JSON.stringify(
       {
         type: "external_account",
@@ -241,7 +241,13 @@ export function withCloudRunAuth(
       .withEnvVariable(
         "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
         "/tmp/wif-credentials.json",
-      );
+      )
+      .withExec([
+        "gcloud",
+        "auth",
+        "login",
+        "--cred-file=/tmp/wif-credentials.json",
+      ]);
   }
 
   if (projectId) {
@@ -371,7 +377,7 @@ export async function deployCloudRunStaticSitePipeline(
     allowUnauthenticated ? "--allow-unauthenticated" : "--no-allow-unauthenticated",
   ];
 
-  const deployed = withCloudRunAuth(
+  const authContainer = await withCloudRunAuth(
     dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
     gcpCredentials,
     projectId,
@@ -379,7 +385,8 @@ export async function deployCloudRunStaticSitePipeline(
     options.wifServiceAccount,
     options.wifOidcToken,
     options.wifAudience,
-  ).withExec(cmd);
+  );
+  const deployed = authContainer.withExec(cmd);
 
   return deployed
     .withExec([
@@ -410,7 +417,7 @@ export async function deleteCloudRunService(
   wifOidcToken?: Secret,
   wifAudience = "",
 ): Promise<string> {
-  return withCloudRunAuth(
+  const authContainer = await withCloudRunAuth(
     dag.container().from(CLOUD_RUN_DEPLOY_IMAGE),
     gcpCredentials,
     projectId,
@@ -418,7 +425,8 @@ export async function deleteCloudRunService(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
-  )
+  );
+  return authContainer
     .withExec([
       "gcloud",
       "run",
