@@ -116,7 +116,7 @@ export async function withFrontendEnv(
     [
       STRICT_SHELL_HEADER,
       "env | grep -E '^(VITE_|FIREBASE_|FIRESTORE_|REMOTE_|BUILD_)' > .env",
-      "if [ -n \"$EXTRA_ENV_SECRET\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
+      "if [ -n \"${EXTRA_ENV_SECRET:-}\" ]; then echo \"$EXTRA_ENV_SECRET\" >> .env; fi",
     ].join("\n"),
   ]);
 }
