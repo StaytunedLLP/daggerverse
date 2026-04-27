@@ -167,7 +167,6 @@ export function withFrontendEnv(
       "const finalEnvContent = filtered.length > 0 ? `${filtered.join('\\n')}\\n` : '';",
       "fs.writeFileSync(envPath, finalEnvContent);",
       "EOF",
-      "// End of withFrontendEnv",
     ]
       .map((line) =>
         line.startsWith("node <<'EOF'") || line === "EOF" ? line : line,
