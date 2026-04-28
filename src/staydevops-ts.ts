@@ -12,6 +12,7 @@ import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
+  deployFirebaseApphostingPipeline,
 } from "./firebase/app-hosting.js";
 import { firebaseAppHostingBase } from "./firebase/base.js";
 import { runNodeChecks } from "./checks/node-checks.js";
@@ -161,8 +162,6 @@ export class Checks {
   ): Promise<void> {
     await this.runDefaultCheck(source, "test");
   }
-
-
 }
 
 /**
@@ -195,10 +194,7 @@ export class StaydevopsTs {
    */
   @check()
   @func()
-  async checkPrTitle(
-    eventFile?: File,
-    githubToken?: Secret,
-  ): Promise<void> {
+  async checkPrTitle(eventFile?: File, githubToken?: Secret): Promise<void> {
     await checkPrTitleFromEvent(eventFile, githubToken);
   }
 
@@ -340,6 +336,9 @@ export class StaydevopsTs {
    *
    * This function automates the creation, deployment, and deletion of App Hosting
    * backends, supporting both Personal Access Tokens and Workload Identity Federation (WIF).
+   * When `buildBeforeDeploy` is enabled for deploys, it also prepares the source
+   * for Vite by writing `.env.production` from the Firebase web app config and
+   * running the package build before Firebase deploys the backend.
    *
    * @param action - The backend lifecycle action: 'deploy' or 'delete'.
    * @param projectId - The unique identifier of your Firebase/GCP project.
@@ -353,6 +352,7 @@ export class StaydevopsTs {
    * @param wifServiceAccount - Email of the service account to impersonate via WIF (deploy only).
    * @param wifOidcToken - OIDC token secret required for WIF authentication in CI environments.
    * @param wifAudience - Optional specific audience for the WIF OIDC token.
+   * @param buildBeforeDeploy - When true, installs dependencies, writes Vite env files, and runs the package build before deploy.
    *
    * @example
    * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "web-app"
@@ -368,14 +368,38 @@ export class StaydevopsTs {
     appId = "",
     region = "asia-southeast1",
     gcpCredentials?: Secret,
+    webappConfig?: Secret,
+    extraEnv?: Secret,
+    nodeAuthToken?: Secret,
+    registryScope?: string,
     wifProvider = "",
     wifServiceAccount = "",
     wifOidcToken?: Secret,
     wifAudience = "",
+    buildBeforeDeploy = false,
   ): Promise<string> {
     if (action === "deploy") {
       if (!source) {
         throw new Error("source is required for 'deploy' action");
+      }
+      if (buildBeforeDeploy) {
+        return deployFirebaseApphostingPipeline(
+          source,
+          projectId,
+          backendId,
+          rootDir,
+          appId,
+          region,
+          gcpCredentials,
+          webappConfig,
+          extraEnv,
+          nodeAuthToken,
+          registryScope,
+          wifProvider,
+          wifServiceAccount,
+          wifOidcToken,
+          wifAudience,
+        );
       }
       return deployFirebaseApphostingProject(
         source,
