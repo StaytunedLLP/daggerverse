@@ -1,11 +1,13 @@
 import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { firebaseAppHostingBase } from "./base.js";
+import { buildFirebaseProjects } from "./build.js";
 import {
   FIREBASE_WIF_CREDENTIALS_PATH,
   FIREBASE_WIF_OIDC_TOKEN_PATH,
   FIREBASE_WORKDIR,
   GCP_CREDENTIALS_PATH,
 } from "./constants.js";
+import { installFirebaseDependencies } from "./dependencies.js";
 
 function withAppHostingAuth(
   container: Container,
@@ -96,6 +98,34 @@ function backendExistsCommand(
   ];
 }
 
+async function prepareFirebaseApphostingSource(
+  source: Directory,
+  rootDir: string,
+  projectId: string,
+  appId?: string,
+  webappConfig?: Secret,
+  extraEnv?: Secret,
+  nodeAuthToken?: Secret,
+  registryScope?: string,
+): Promise<Directory> {
+  const directories = [rootDir].filter(
+    (entry) => typeof entry === "string" && entry.trim().length > 0,
+  );
+
+  const installed = await installFirebaseDependencies(source, directories, {
+    nodeAuthToken,
+    registryScope,
+  });
+
+  return buildFirebaseProjects(installed, directories, {
+    frontendDir: rootDir,
+    projectId,
+    appId,
+    webappConfig,
+    extraEnv,
+  });
+}
+
 export async function deployFirebaseApphostingProject(
   source: Directory,
   projectId: string,
@@ -156,6 +186,49 @@ export async function deployFirebaseApphostingProject(
   };
 
   return backend.result?.uri ?? backend.uri ?? "URL not found";
+}
+
+export async function deployFirebaseApphostingPipeline(
+  source: Directory,
+  projectId: string,
+  backendId: string,
+  rootDir = ".",
+  appId = "",
+  region = "asia-southeast1",
+  gcpCredentials?: Secret,
+  webappConfig?: Secret,
+  extraEnv?: Secret,
+  nodeAuthToken?: Secret,
+  registryScope?: string,
+  wifProvider = "",
+  wifServiceAccount = "",
+  wifOidcToken?: Secret,
+  wifAudience = "",
+): Promise<string> {
+  const prepared = await prepareFirebaseApphostingSource(
+    source,
+    rootDir,
+    projectId,
+    appId,
+    webappConfig,
+    extraEnv,
+    nodeAuthToken,
+    registryScope,
+  );
+
+  return deployFirebaseApphostingProject(
+    prepared,
+    projectId,
+    backendId,
+    rootDir,
+    appId,
+    region,
+    gcpCredentials,
+    wifProvider,
+    wifServiceAccount,
+    wifOidcToken,
+    wifAudience,
+  );
 }
 
 export async function deleteFirebaseApphostingBackend(
