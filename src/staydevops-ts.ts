@@ -349,6 +349,11 @@ export class StaydevopsTs {
    * @param region - The GCP region to provision the backend in (e.g. 'us-central1').
    * @param gcpCredentials - Optional secret containing GCP service account JSON content.
    * @param wifProvider - Full resource name of the WIF provider (deploy only).
+   * @param webappConfig - Optional secret JSON containing the full Firebase web app configuration.
+   * @param extraEnv - Optional secret containing extra environment variables for the frontend build.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
+   * @param registryScope - The GitHub Packages organization scope (e.g. 'staytunedllp').
+   * @param wifProvider - Full resource name of the WIF provider (deploy only).
    * @param wifServiceAccount - Email of the service account to impersonate via WIF (deploy only).
    * @param wifOidcToken - OIDC token secret required for WIF authentication in CI environments.
    * @param wifAudience - Optional specific audience for the WIF OIDC token.
