@@ -39,8 +39,9 @@ export class Checks {
   private async runDefaultCheck(
     source: Directory,
     mode: CheckMode,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await runNodeChecks(source, undefined, {
+    await runNodeChecks(source, nodeAuthToken, {
       [mode]: true,
     });
   }
@@ -86,6 +87,7 @@ export class Checks {
    * Validates repository formatting using the standard `npm run format:check` command.
    *
    * @param source - Repository source directory to validate.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks format --source .
@@ -98,14 +100,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "format");
+    await this.runDefaultCheck(source, "format", nodeAuthToken);
   }
 
   /**
    * Executes the repository linter using the standard `npm run lint` command.
    *
    * @param source - Repository source directory to lint.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks lint --source .
@@ -118,14 +122,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "lint");
+    await this.runDefaultCheck(source, "lint", nodeAuthToken);
   }
 
   /**
    * Verifies that the repository builds successfully using the `npm run build` command.
    *
    * @param source - Repository source directory to build.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks build --source .
@@ -138,14 +144,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "build");
+    await this.runDefaultCheck(source, "build", nodeAuthToken);
   }
 
   /**
    * Executes the standard repository test suite using the `npm run test` command.
    *
    * @param source - Repository source directory to test.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks test --source .
@@ -158,8 +166,9 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "test");
+    await this.runDefaultCheck(source, "test", nodeAuthToken);
   }
 
 
