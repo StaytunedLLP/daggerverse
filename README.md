@@ -92,11 +92,13 @@ dagger call -m github.com/StaytunedLLP/daggerverse fb-webhosting \
 
 This module no longer requires `NODE_AUTH_TOKEN` for public repositories by default.
 
-A token is only needed when the target repository installs private packages from GitHub Packages, such as `@staytunedllp/*` packages that are not publicly readable. In that case, pass:
+A token is only needed when the target repository installs private packages from GitHub Packages, such as `@staytunedllp/*` packages that are not publicly readable. In that case, pass the token to any check that needs the workspace installed first:
 
 ```bash
 --node-auth-token=env:NODE_AUTH_TOKEN
 ```
+
+That applies to `checks install`, `checks format`, `checks lint`, `checks build`, `checks test`, and `checks test-playwright` when the repository depends on private npm packages.
 
 If the repository uses only public npm packages, you can omit the token entirely.
 
