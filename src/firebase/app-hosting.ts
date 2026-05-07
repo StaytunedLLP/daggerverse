@@ -104,18 +104,49 @@ else
 
   echo "Backend ${backendId} missing or invalid. Creating..."
 
-  firebase apphosting:backends:create \
-    --backend ${backendId} \
-    --project ${projectId} \
-    --primary-region ${region}${appFlag}
+  ATTEMPT=1
+  MAX_ATTEMPTS=5
+
+    firebase apphosting:backends:create \
+      --backend ${backendId} \
+      --project ${projectId} \
+      --primary-region ${region}${appFlag}
+  do
+
+    if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+      echo "Backend creation failed after retries."
+      exit 1
+    fi
+
+    SLEEP_TIME=$((ATTEMPT * 10))
+
+    echo "Backend creation failed. Retrying in ${SLEEP_TIME}s..."
+
+    sleep $SLEEP_TIME
+
+    ATTEMPT=$((ATTEMPT + 1))
+  done
 
   echo "Waiting for backend readiness..."
+
+  READY_ATTEMPT=1
+  READY_MAX_ATTEMPTS=30
 
   until firebase apphosting:backends:get ${backendId} \
     --project ${projectId} \
     --json | grep -q '"uri"'
   do
+
+    if [ $READY_ATTEMPT -ge $READY_MAX_ATTEMPTS ]; then
+      echo "Backend readiness timed out."
+      exit 1
+    fi
+
+    echo "Backend not ready yet. Waiting..."
+
     sleep 10
+
+    READY_ATTEMPT=$((READY_ATTEMPT + 1))
   done
 
   echo "Backend ${backendId} is ready."
