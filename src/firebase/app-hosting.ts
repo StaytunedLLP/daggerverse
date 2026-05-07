@@ -83,6 +83,7 @@ function backendExistsCommand(
   backendId: string,
   appId: string,
   region: string,
+  rootDir: string,
 ): string[] {
   const appFlag = appId ? ` --app ${appId}` : "";
 
@@ -107,6 +108,7 @@ else
   ATTEMPT=1
   MAX_ATTEMPTS=5
 
+  until printf '%s\n' '${rootDir}' | \
     firebase apphosting:backends:create \
       --backend ${backendId} \
       --project ${projectId} \
@@ -120,9 +122,9 @@ else
 
     SLEEP_TIME=$((ATTEMPT * 10))
 
-    echo "Backend creation failed. Retrying in ${SLEEP_TIME}s..."
+    echo "Backend creation failed. Retrying in \${SLEEP_TIME}s..."
 
-    sleep $SLEEP_TIME
+    sleep \${SLEEP_TIME}
 
     ATTEMPT=$((ATTEMPT + 1))
   done
