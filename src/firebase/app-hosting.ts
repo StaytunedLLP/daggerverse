@@ -83,6 +83,7 @@ function backendExistsCommand(
   backendId: string,
   appId: string,
   region: string,
+  rootDir: string,
 ): string[] {
   const appFlag = appId ? ` --app ${appId}` : "";
 
@@ -107,10 +108,12 @@ else
   ATTEMPT=1
   MAX_ATTEMPTS=5
 
-    firebase apphosting:backends:create \
+  until (
+    printf '%s\n' '${rootDir}' | firebase apphosting:backends:create \
       --backend ${backendId} \
       --project ${projectId} \
       --primary-region ${region}${appFlag}
+  )
   do
 
     if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
@@ -154,7 +157,6 @@ fi
 `,
   ];
 }
-
 async function prepareFirebaseApphostingSource(
   source: Directory,
   rootDir: string,
