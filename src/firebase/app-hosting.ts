@@ -96,7 +96,7 @@ BACKEND_JSON=$(firebase apphosting:backends:get ${backendId} \
   --project ${projectId} \
   --json 2>/dev/null || true)
 
-if echo "$BACKEND_JSON" | jq -e '.result.uri' >/dev/null; then
+if echo "$BACKEND_JSON" | grep -q '"uri"'; then
 
   echo "Backend ${backendId} already exists and is healthy."
 
@@ -113,7 +113,7 @@ else
 
   until firebase apphosting:backends:get ${backendId} \
     --project ${projectId} \
-    --json | jq -e '.result.uri' >/dev/null
+    --json | grep -q '"uri"'
   do
     sleep 10
   done
