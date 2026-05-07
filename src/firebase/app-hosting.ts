@@ -83,7 +83,6 @@ function backendExistsCommand(
   backendId: string,
   appId: string,
   region: string,
-  rootDir: string,
 ): string[] {
   const appFlag = appId ? ` --app ${appId}` : "";
 
@@ -108,7 +107,6 @@ else
   ATTEMPT=1
   MAX_ATTEMPTS=5
 
-  until printf '%s\n' '${rootDir}' | \
     firebase apphosting:backends:create \
       --backend ${backendId} \
       --project ${projectId} \
