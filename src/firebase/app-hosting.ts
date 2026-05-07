@@ -89,12 +89,38 @@ function backendExistsCommand(
   return [
     "bash",
     "-c",
-    `if firebase apphosting:backends:list --project ${projectId} | grep -q "\\b${backendId}\\b"; then ` +
-      `  echo "Backend ${backendId} already exists."; ` +
-      `else ` +
-      `  echo "Backend ${backendId} not found, attempting to create in ${region}..."; ` +
-      `  firebase apphosting:backends:create --backend ${backendId} --project ${projectId} --primary-region ${region}${appFlag} --non-interactive; ` +
-      `fi`,
+    `
+set -euo pipefail
+
+BACKEND_JSON=$(firebase apphosting:backends:get ${backendId} \
+  --project ${projectId} \
+  --json 2>/dev/null || true)
+
+if echo "$BACKEND_JSON" | jq -e '.result.uri' >/dev/null; then
+
+  echo "Backend ${backendId} already exists and is healthy."
+
+else
+
+  echo "Backend ${backendId} missing or invalid. Creating..."
+
+  firebase apphosting:backends:create \
+    --backend ${backendId} \
+    --project ${projectId} \
+    --primary-region ${region}${appFlag}
+
+  echo "Waiting for backend readiness..."
+
+  until firebase apphosting:backends:get ${backendId} \
+    --project ${projectId} \
+    --json | jq -e '.result.uri' >/dev/null
+  do
+    sleep 10
+  done
+
+  echo "Backend ${backendId} is ready."
+fi
+`,
   ];
 }
 
