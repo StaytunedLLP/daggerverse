@@ -41,6 +41,12 @@ export interface ReleasePackageOptions {
   baseBranch?: string;
 
   /**
+   * Repo-relative path to the package folder on the base branch.
+   * Defaults to the repository root.
+   */
+  packagePath?: string;
+
+  /**
    * Pull request branch being synchronized.
    */
   prBranch?: string;

@@ -2,7 +2,7 @@ import path from "node:path";
 import { Directory } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
-  ensureFileExists,
+  ensureFileExistsAtPath,
   extractScope,
   compareVersions,
   nextPatchVersion,
@@ -63,15 +63,17 @@ async function syncPrVersion(
   options: ReleasePackageOptions,
 ): Promise<SyncPrVersionResult> {
   const baseBranch = options.baseBranch ?? "main";
+  const packagePath = options.packagePath ?? ".";
   const mainManifest = await readBaseBranchPackageJson(
     options.githubToken,
     options.repoOwner,
     options.repoName,
     baseBranch,
+    packagePath,
   );
   const manifest = await readPackageJson(options.source);
 
-  await ensureFileExists(options.source, "package-lock.json");
+  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
   parseExactVersion(mainManifest.version);
   parseExactVersion(manifest.version);
 
@@ -126,7 +128,7 @@ async function publishRelease(
     options.registryScope,
   );
 
-  await ensureFileExists(options.source, "package-lock.json");
+  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
   parseExactVersion(manifest.version);
 
   if (

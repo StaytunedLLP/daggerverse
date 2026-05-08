@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Directory, Secret, dag } from "@dagger.io/dagger";
 import { PackageManifest, VersionParts } from "./types.js";
 import { STRICT_SHELL_HEADER } from "../shared/constants.js";
@@ -5,18 +6,38 @@ import { STRICT_SHELL_HEADER } from "../shared/constants.js";
 const EXACT_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const REGISTRY_SCOPE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
+function packageFilePath(packagePath: string, fileName: string): string {
+  if (packagePath === "." || packagePath.length === 0) {
+    return fileName;
+  }
+
+  return path.posix.join(packagePath, fileName);
+}
+
 /**
  * Reads and validates the root package.json manifest.
  */
 export async function readPackageJson(
   source: Directory,
 ): Promise<PackageManifest> {
+  return readPackageJsonAtPath(source);
+}
+
+/**
+ * Reads and validates package.json from a package path within the source directory.
+ */
+export async function readPackageJsonAtPath(
+  source: Directory,
+  packagePath = ".",
+): Promise<PackageManifest> {
   let content: string;
 
   try {
-    content = await source.file("package.json").contents();
+    content = await source.file(packageFilePath(packagePath, "package.json")).contents();
   } catch {
-    throw new Error("Missing package.json in the source directory.");
+    throw new Error(
+      `Missing package.json in the source directory at "${packagePath}".`,
+    );
   }
 
   let manifest: unknown;
@@ -55,6 +76,21 @@ export async function ensureFileExists(
   source: Directory,
   filePath: string,
 ): Promise<void> {
+  if (!(await source.exists(filePath))) {
+    throw new Error(`Missing ${filePath} in the source directory.`);
+  }
+}
+
+/**
+ * Ensures a required file exists within a package path in the source directory.
+ */
+export async function ensureFileExistsAtPath(
+  source: Directory,
+  packagePath: string,
+  fileName: string,
+): Promise<void> {
+  const filePath = packageFilePath(packagePath, fileName);
+
   if (!(await source.exists(filePath))) {
     throw new Error(`Missing ${filePath} in the source directory.`);
   }
@@ -144,13 +180,14 @@ export async function readBaseBranchPackageJson(
   repoOwner: string,
   repoName: string,
   branch: string,
+  packagePath = ".",
 ): Promise<PackageManifest> {
   const repository = dag.git(repositoryUrl(repoOwner, repoName), {
     httpAuthUsername: "x-access-token",
     httpAuthToken: githubToken,
   });
 
-  return readPackageJson(repository.branch(branch).tree());
+  return readPackageJsonAtPath(repository.branch(branch).tree(), packagePath);
 }
 
 /**
