@@ -58,19 +58,6 @@ function packageRepoPath(packagePath: string): string {
   return packagePath === "." ? GIT_REPO_ROOT : path.posix.join(GIT_REPO_ROOT, packagePath);
 }
 
-function packageUpdatedPath(packagePath: string, fileName: string): string {
-  return packagePath === "." ? fileName : path.posix.join(packagePath, fileName);
-}
-
-function packageWorkspaceFilePath(
-  packagePath: string,
-  fileName: string,
-): string {
-  return packagePath === "."
-    ? fileName
-    : path.posix.join(packagePath, fileName);
-}
-
 async function pushUpdatedPackageFiles(
   source: Directory,
   updatedWorkspace: Directory,
@@ -83,8 +70,12 @@ async function pushUpdatedPackageFiles(
 
   const packagePath = options.packagePath ?? ".";
   const repoPath = packageRepoPath(packagePath);
-  const packageJsonPath = packageUpdatedPath(packagePath, "package.json");
-  const packageLockPath = packageUpdatedPath(packagePath, "package-lock.json");
+  const packageJsonPath = packagePath === "."
+    ? "package.json"
+    : path.posix.join(packagePath, "package.json");
+  const packageLockPath = packagePath === "."
+    ? "package-lock.json"
+    : path.posix.join(packagePath, "package-lock.json");
   const updatedFilter = {
     include: [packageJsonPath, packageLockPath],
   };
@@ -102,11 +93,13 @@ async function pushUpdatedPackageFiles(
         "set -eu",
         `cd ${shellQuote(GIT_REPO_ROOT)}`,
         `test -d .git || { echo "Missing git metadata in source checkout." >&2; exit 1; }`,
-        `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/${options.repoOwner}/${options.repoName}.git"`,
+        `repo_owner=${shellQuote(options.repoOwner)}`,
+        `repo_name=${shellQuote(options.repoName)}`,
+        `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/$repo_owner/$repo_name.git"`,
         `git remote set-url origin "$repo_url"`,
         `git checkout -B ${shellQuote(options.prBranch)}`,
-        `cp /updated/${shellQuote(packageJsonPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
-        `cp /updated/${shellQuote(packageLockPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
+        `cp ${shellQuote(path.posix.join("/updated", packageJsonPath))} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
+        `cp ${shellQuote(path.posix.join("/updated", packageLockPath))} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
         `cd ${shellQuote(repoPath)}`,
         `if git diff --quiet -- package.json package-lock.json; then`,
         `  echo "No release files changed, skipping commit."`,
@@ -141,8 +134,10 @@ async function pushReleaseTag(
       "-c",
       [
         "set -eu",
-        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${options.repoOwner}/${options.repoName}.git"`,
-        `git clone --branch ${shellQuote(options.baseBranch ?? "main")} --single-branch "$repo_url" ${shellQuote(GIT_REPO_ROOT)}`,
+        `repo_owner=${shellQuote(options.repoOwner)}`,
+        `repo_name=${shellQuote(options.repoName)}`,
+        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/$repo_owner/$repo_name.git"`,
+        `git clone --branch ${shellQuote(options.baseBranch ?? "main")} --single-branch --depth=1 "$repo_url" ${shellQuote(GIT_REPO_ROOT)}`,
         `cd ${shellQuote(GIT_REPO_ROOT)}`,
         `git config user.name ${shellQuote(GIT_USER_NAME)}`,
         `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,

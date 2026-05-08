@@ -203,24 +203,36 @@ export async function readBaseBranchPackageJson(
     ]);
 
   const content = await container.file("/tmp/package.json").contents();
-  const manifest = JSON.parse(content) as Partial<PackageManifest>;
+  let manifest: unknown;
+
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    throw new Error(
+      `Invalid package.json in base branch at "${packagePath}": failed to parse JSON.`,
+    );
+  }
 
   if (
     !manifest ||
     typeof manifest !== "object" ||
-    typeof manifest.name !== "string" ||
-    manifest.name.trim().length === 0 ||
-    typeof manifest.version !== "string" ||
-    manifest.version.trim().length === 0
+    typeof (manifest as Partial<PackageManifest>).name !== "string" ||
+    (manifest as Partial<PackageManifest>).name?.trim().length === 0 ||
+    typeof (manifest as Partial<PackageManifest>).version !== "string" ||
+    (manifest as Partial<PackageManifest>).version?.trim().length === 0
   ) {
     throw new Error(
       `Invalid package.json in base branch at "${packagePath}".`,
     );
   }
 
+  const typedManifest = manifest as Partial<PackageManifest>;
+  const name = typedManifest.name;
+  const version = typedManifest.version;
+
   return {
-    name: manifest.name,
-    version: manifest.version,
+    name: name as string,
+    version: version as string,
   };
 }
 
