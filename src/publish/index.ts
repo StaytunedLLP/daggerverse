@@ -1,153 +1,201 @@
-import { dag } from "@dagger.io/dagger";
+import path from "node:path";
+import { Directory } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
+  ensureFileExistsAtPath,
   extractScope,
-  getPRNumber,
+  compareVersions,
+  nextPatchVersion,
+  parseExactVersion,
+  readBaseBranchPackageJson,
   readPackageJson,
-  validateBaseVersion,
+  validateRegistryScope,
 } from "./helpers.js";
-import { PublishOptions, PublishContextType } from "./types.js";
 import {
-  DEFAULT_IMAGE,
+  ReleasePackageOptions,
+  ReleasePackageResult,
+  PublishPackageResult,
+  SyncPrVersionResult,
+} from "./types.js";
+import {
+  DEFAULT_SOURCE_EXCLUDES,
   DEFAULT_WORKSPACE,
   STRICT_SHELL_HEADER,
 } from "../shared/constants.js";
+import { createBaseNodeContainer, withNpmCache } from "../shared/container.js";
 import { shellQuote } from "../shared/path-utils.js";
 import {
+  requirePackageLock,
   withFullSource,
   withInstalledDependencies,
   withLockfilesOnly,
   withNpmAuth,
 } from "../shared/npm.js";
-import { withNpmCache } from "../shared/container.js";
 
-/**
- * Deterministic package publishing logic.
- */
-export async function publishPackage(options: PublishOptions): Promise<string> {
-  const {
-    source,
-    ref,
-    eventName,
-    inputBranch,
-    releasePrNumber,
-    githubToken,
-    repoOwner,
-    repoName,
-  } = options;
+const SYNC_WORKSPACE = "/tmp/release-package-sync";
 
-  // 1. Resolve Context
-  let context: PublishContextType;
-  if (eventName === "pull_request") {
-    context = "main";
-  } else if (eventName === "workflow_dispatch") {
-    context = releasePrNumber !== undefined ? "main" : "pr";
-    if (context === "pr" && !inputBranch) {
-      throw new Error(
-        "Manual trigger (workflow_dispatch) requires inputBranch.",
-      );
-    }
-  } else {
-    throw new Error(
-      `Unsupported event \"${eventName}\". Allowed events: pull_request, workflow_dispatch.`,
-    );
-  }
+function serializeResult(result: ReleasePackageResult): string {
+  return JSON.stringify(result, null, 2);
+}
 
-  // 2. Read package.json
-  const manifest = await readPackageJson(source);
-  const packageVersion = manifest.version;
-  const packageName = manifest.name;
-
-  // 3. Validate Base Version
-  validateBaseVersion(packageVersion);
-
-  // For merged release-PR publish, use the version in package.json from the merged commit.
-  // For manual PR publish, use the version from the selected PR branch package.json.
-  let baseVersion = packageVersion;
-
-  // 4. Resolve PR Number if needed
-  let prNumber: number | undefined;
-  if (context === "pr" && inputBranch) {
-    prNumber = await getPRNumber(githubToken, repoOwner, repoName, inputBranch);
-  }
-
-  // 5. Generate Final Version
-  let finalVersion: string;
-  let npmTag: string;
-
-  if (context === "main") {
-    finalVersion = packageVersion;
-    npmTag = "latest";
-  } else if (context === "pr" && prNumber !== undefined) {
-    finalVersion = `${baseVersion}-pre-pr${prNumber}`;
-    npmTag = `pr-${prNumber}`;
-  } else {
-    throw new Error("Failed to generate final version: Invalid context state.");
-  }
-
-  // 6. Registry Conflict Check
-  const exists = await checkRegistryVersion(
-    packageName,
-    finalVersion,
-    githubToken,
+function resolveRegistryScope(
+  packageName: string,
+  registryScope?: string,
+): string {
+  return validateRegistryScope(
+    registryScope ?? extractScope(packageName) ?? "staytunedllp",
   );
-  if (exists && context === "pr") {
+}
+
+async function exportUpdatedManifestFiles(
+  updatedWorkspace: Directory,
+): Promise<void> {
+  // Dagger mutates files inside an isolated workspace snapshot, but the workflow
+  // can only commit files that exist in the checked-out repository on disk.
+  await updatedWorkspace
+    .filter({
+      include: ["package.json", "package-lock.json"],
+    })
+    .export(path.resolve(process.cwd()));
+}
+
+async function syncPrVersion(
+  options: ReleasePackageOptions,
+): Promise<SyncPrVersionResult> {
+  const baseBranch = options.baseBranch ?? "main";
+  const packagePath = options.packagePath ?? ".";
+  const mainManifest = await readBaseBranchPackageJson(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    baseBranch,
+    packagePath,
+  );
+  const manifest = await readPackageJson(options.source);
+
+  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
+  parseExactVersion(mainManifest.version);
+  parseExactVersion(manifest.version);
+
+  if (compareVersions(manifest.version, mainManifest.version) > 0) {
+    return {
+      action: "sync-pr-version",
+      baseBranch,
+      prBranch: options.prBranch,
+      mainVersion: mainManifest.version,
+      currentVersion: manifest.version,
+      changed: false,
+    };
+  }
+
+  const newVersion = nextPatchVersion(mainManifest.version);
+  let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
+
+  container = withNpmCache(container);
+  container = withLockfilesOnly(container, options.source, {
+    workspace: SYNC_WORKSPACE,
+  });
+  container = requirePackageLock(container, ".", { workspace: SYNC_WORKSPACE });
+  container = container.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(SYNC_WORKSPACE)}`,
+      `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
+    ].join("\n"),
+  ]);
+
+  await exportUpdatedManifestFiles(container.directory(SYNC_WORKSPACE));
+
+  return {
+    action: "sync-pr-version",
+    baseBranch,
+    prBranch: options.prBranch,
+    mainVersion: mainManifest.version,
+    currentVersion: manifest.version,
+    newVersion,
+    changed: true,
+  };
+}
+
+async function publishRelease(
+  options: ReleasePackageOptions,
+): Promise<PublishPackageResult> {
+  const manifest = await readPackageJson(options.source);
+  const registryScope = resolveRegistryScope(
+    manifest.name,
+    options.registryScope,
+  );
+
+  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
+  parseExactVersion(manifest.version);
+
+  if (
+    await checkRegistryVersion(
+      manifest.name,
+      manifest.version,
+      options.githubToken,
+      registryScope,
+    )
+  ) {
     throw new Error(
-      `Version "${finalVersion}" of package "${packageName}" already exists in registry.`,
+      `Version "${manifest.version}" of package "${manifest.name}" already exists in the registry.`,
     );
   }
 
-  // 7. Prepare Container and Publish
-  const registryScope =
-    options.registryScope || extractScope(packageName) || "staytunedllp";
-  const releaseTag = `v${finalVersion}`;
+  let container = createBaseNodeContainer();
 
-  let container = dag
-    .container()
-    .from(DEFAULT_IMAGE)
-    .withWorkdir(DEFAULT_WORKSPACE);
-
-  // Apply Volume Cache
   container = withNpmCache(container);
-
-  // Lockfile-first Layering
-  container = withLockfilesOnly(container, source);
-
-  // Authentication
-  container = withNpmAuth(container, githubToken, {
+  container = withLockfilesOnly(container, options.source);
+  container = withNpmAuth(container, options.githubToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
   });
-
-  // Install Dependencies (Layered Cache)
   container = withInstalledDependencies(container, ".", {
+    workspace: DEFAULT_WORKSPACE,
     npmCiArgs: ["--workspaces=false"],
   });
-
-  // Add Full Source
-  container = withFullSource(container, source);
-
-  const skipNpmPublish = exists && context === "main";
-
-  // Override Version and Publish
+  // Reapply npm auth after copying the full source in case the repository ships its own .npmrc.
+  container = withFullSource(container, options.source, {
+    exclude: DEFAULT_SOURCE_EXCLUDES,
+  });
+  container = requirePackageLock(container);
+  container = withNpmAuth(container, options.githubToken, {
+    registryScope,
+    workspace: DEFAULT_WORKSPACE,
+    npmrcPaths: ".",
+  });
   container = container.withExec([
     "bash",
-    "-c",
-    `${STRICT_SHELL_HEADER}
-    # Update package.json version locally only
-    node -e '
-      const fs = require("fs");
-      const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-      pkg.version = "${finalVersion}";
-      fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-    '
-    npm run build:publish
-    if [[ "${skipNpmPublish}" != "true" ]]; then
-      npm publish --tag ${shellQuote(npmTag)}
-    fi
-    `,
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(DEFAULT_WORKSPACE)}`,
+      "npm publish --tag latest",
+    ].join("\n"),
   ]);
 
-  return container.stdout();
+  await container.sync();
+
+  return {
+    action: "publish",
+    packageName: manifest.name,
+    publishedVersion: manifest.version,
+  };
+}
+
+/**
+ * Production release pipeline with PR version synchronization and main-only publishing.
+ */
+export async function releasePackage(
+  options: ReleasePackageOptions,
+): Promise<string> {
+  const result =
+    options.action === "sync-pr-version"
+      ? await syncPrVersion(options)
+      : await publishRelease(options);
+
+  return serializeResult(result);
 }
