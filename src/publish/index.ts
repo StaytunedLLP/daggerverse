@@ -282,7 +282,7 @@ async function publishRelease(
     [
       STRICT_SHELL_HEADER,
       `cd ${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
-      "npm publish --tag latest",
+      "npm publish --registry=https://npm.pkg.github.com --tag latest",
     ].join("\n"),
   ]);
 
