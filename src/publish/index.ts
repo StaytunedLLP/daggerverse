@@ -32,6 +32,7 @@ import {
 } from "../shared/npm.js";
 
 const DEFAULT_BASE_BRANCH = "main";
+const SYNC_WORKSPACE = "/tmp/release-package-sync";
 
 function serializeResult(result: ReleasePackageResult): string {
   return JSON.stringify(result, null, 2);
@@ -84,25 +85,24 @@ async function syncPrVersion(
   }
 
   const newVersion = nextPatchVersion(mainManifest.version);
-  const workspacePath = "/tmp/release-package-sync";
-  let container = createBaseNodeContainer({ workspace: workspacePath });
+  let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
 
   container = withNpmCache(container);
   container = withFullSource(container, options.source, {
     exclude: DEFAULT_SOURCE_EXCLUDES,
   });
-  container = requirePackageLock(container, ".", { workspace: workspacePath });
+  container = requirePackageLock(container, ".", { workspace: SYNC_WORKSPACE });
   container = container.withExec([
     "bash",
     "-lc",
     [
       STRICT_SHELL_HEADER,
-      `cd ${shellQuote(workspacePath)}`,
+      `cd ${shellQuote(SYNC_WORKSPACE)}`,
       `npm version ${shellQuote(newVersion)} --no-git-tag-version`,
     ].join("\n"),
   ]);
 
-  await exportUpdatedManifestFiles(container.directory(workspacePath));
+  await exportUpdatedManifestFiles(container.directory(SYNC_WORKSPACE));
 
   return {
     action: "sync-pr-version",

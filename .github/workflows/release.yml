@@ -79,7 +79,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "chore: bump version to v${{ steps.pr_version_changes.outputs.version }}"
+          git commit -m "chore: bump version to ${{ steps.pr_version_changes.outputs.version }}"
           git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
 
       - name: Publish package from main
