@@ -1,56 +1,78 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 
-export type PublishContextType = "main" | "pr";
+export type ReleasePackageAction = "sync-pr-version" | "publish";
 
-export interface PublishOptions {
+export interface ReleasePackageOptions {
   /**
-   * Repository source directory to publish from.
+   * Action to run within the release pipeline.
+   */
+  action: ReleasePackageAction;
+
+  /**
+   * Repository source directory to operate on.
    */
   source: Directory;
 
   /**
-   * Git ref for the commit being published (e.g. a merged release-PR commit SHA or a branch ref for manual dispatch).
-   */
-  ref: string;
-
-  /**
-   * GitHub event name (e.g. pull_request, workflow_dispatch).
-   */
-  eventName: string;
-
-  /**
-   * Manual branch input provided for workflow_dispatch.
-   */
-  inputBranch?: string;
-
-  /**
-   * Release PR number to finalize after publishing a merged release commit.
-   */
-  releasePrNumber?: number;
-
-  /**
-   * GitHub PAT for npm authentication and PR validation.
+   * GitHub token used for repository reads and package registry access.
    */
   githubToken: Secret;
 
   /**
-   * Repository owner (e.g. StaytunedLLP).
+   * Repository owner (for example, StaytunedLLP).
    */
   repoOwner: string;
 
   /**
-   * Repository name (e.g. devops).
+   * Repository name (for example, daggerverse).
    */
   repoName: string;
 
   /**
-   * The scope of the npm package (e.g. staytunedllp).
-   * Defaults to extracting from package.json if possible.
+   * The organization scope for the npm package.
+   * Defaults to extracting it from package.json when available.
    */
   registryScope?: string;
+
+  /**
+   * Base branch used as the authoritative version source for PR synchronization.
+   * Defaults to main.
+   */
+  baseBranch?: string;
+
+  /**
+   * Pull request branch being synchronized.
+   */
+  prBranch?: string;
 }
 
 export interface PackageManifest {
   name: string;
   version: string;
 }
+
+export interface VersionParts {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+export interface SyncPrVersionResult {
+  action: "sync-pr-version";
+  baseBranch: string;
+  prBranch?: string;
+  mainVersion: string;
+  prVersion: string;
+  changed: boolean;
+  newVersion?: string;
+}
+
+export interface PublishPackageResult {
+  action: "publish";
+  packageName: string;
+  publishedVersion: string;
+}
+
+export type ReleasePackageResult =
+  | SyncPrVersionResult
+  | PublishPackageResult;
