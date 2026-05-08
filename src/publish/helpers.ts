@@ -2,6 +2,7 @@ import path from "node:path";
 import { Directory, Secret, dag } from "@dagger.io/dagger";
 import { PackageManifest, VersionParts } from "./types.js";
 import { STRICT_SHELL_HEADER } from "../shared/constants.js";
+import { shellQuote } from "../shared/path-utils.js";
 
 const EXACT_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const REGISTRY_SCOPE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -182,12 +183,57 @@ export async function readBaseBranchPackageJson(
   branch: string,
   packagePath = ".",
 ): Promise<PackageManifest> {
-  const repository = dag.git(repositoryUrl(repoOwner, repoName), {
-    httpAuthUsername: "x-access-token",
-    httpAuthToken: githubToken,
-  });
+  const repoRoot = "/tmp/release-package-base";
+  const filePath = packageFilePath(packagePath, "package.json");
 
-  return readPackageJsonAtPath(repository.branch(branch).tree(), packagePath);
+  const container = dag
+    .container()
+    .from("alpine/git:latest")
+    .withSecretVariable("GITHUB_TOKEN", githubToken)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${repoOwner}/${repoName}.git"`,
+        `git clone --branch ${shellQuote(branch)} --single-branch --no-checkout --depth=1 "$repo_url" ${shellQuote(repoRoot)}`,
+        `cd ${shellQuote(repoRoot)}`,
+        `git show HEAD:${shellQuote(filePath)} > /tmp/package.json`,
+      ].join("\n"),
+    ]);
+
+  const content = await container.file("/tmp/package.json").contents();
+  let manifest: unknown;
+
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    throw new Error(
+      `Invalid package.json in base branch at "${packagePath}": failed to parse JSON.`,
+    );
+  }
+
+  if (
+    !manifest ||
+    typeof manifest !== "object" ||
+    typeof (manifest as Partial<PackageManifest>).name !== "string" ||
+    (manifest as Partial<PackageManifest>).name?.trim().length === 0 ||
+    typeof (manifest as Partial<PackageManifest>).version !== "string" ||
+    (manifest as Partial<PackageManifest>).version?.trim().length === 0
+  ) {
+    throw new Error(
+      `Invalid package.json in base branch at "${packagePath}".`,
+    );
+  }
+
+  const typedManifest = manifest as Partial<PackageManifest>;
+  const name = typedManifest.name;
+  const version = typedManifest.version;
+
+  return {
+    name: name as string,
+    version: version as string,
+  };
 }
 
 /**
