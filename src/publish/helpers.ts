@@ -182,12 +182,45 @@ export async function readBaseBranchPackageJson(
   branch: string,
   packagePath = ".",
 ): Promise<PackageManifest> {
-  const repository = dag.git(repositoryUrl(repoOwner, repoName), {
-    httpAuthUsername: "x-access-token",
-    httpAuthToken: githubToken,
-  });
+  const token = await githubToken.plaintext();
+  const filePath = packageFilePath(packagePath, "package.json");
+  const response = await fetch(
+    `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}?ref=${branch}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    },
+  );
 
-  return readPackageJsonAtPath(repository.branch(branch).tree(), packagePath);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to read ${filePath} from ${repoOwner}/${repoName}@${branch}: ${response.status} ${response.statusText} - ${text}`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    content?: string;
+    encoding?: string;
+  };
+
+  if (payload.encoding !== "base64" || typeof payload.content !== "string") {
+    throw new Error(
+      `Unexpected GitHub API response while reading ${filePath} from ${repoOwner}/${repoName}@${branch}.`,
+    );
+  }
+
+  const content = Buffer.from(payload.content.replace(/\n/g, ""), "base64").toString(
+    "utf8",
+  );
+
+  return readPackageJsonAtPath(
+    dag.directory().withNewFile(filePath, content),
+    packagePath,
+  );
 }
 
 /**
