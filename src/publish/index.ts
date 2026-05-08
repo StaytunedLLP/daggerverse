@@ -9,6 +9,7 @@ import {
   parseExactVersion,
   readBaseBranchPackageJson,
   readPackageJson,
+  validateRegistryScope,
 } from "./helpers.js";
 import {
   ReleasePackageOptions,
@@ -42,14 +43,16 @@ function resolveRegistryScope(
   packageName: string,
   registryScope?: string,
 ): string {
-  return registryScope ?? extractScope(packageName) ?? "staytunedllp";
+  return validateRegistryScope(
+    registryScope ?? extractScope(packageName) ?? "staytunedllp",
+  );
 }
 
 async function exportUpdatedManifestFiles(
   updatedWorkspace: Directory,
 ): Promise<void> {
-  // Dagger updates the manifests inside an isolated workspace, so export just the
-  // mutated files back into the checked-out repository for the GitHub workflow to commit.
+  // Dagger mutates files inside an isolated workspace snapshot, but the workflow
+  // can only commit files that exist in the checked-out repository on disk.
   await updatedWorkspace
     .filter({
       include: ["package.json", "package-lock.json"],

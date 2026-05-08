@@ -3,6 +3,7 @@ import { PackageManifest, VersionParts } from "./types.js";
 import { STRICT_SHELL_HEADER } from "../shared/constants.js";
 
 const EXACT_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const REGISTRY_SCOPE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 /**
  * Reads and validates the root package.json manifest.
@@ -68,6 +69,19 @@ export function extractScope(packageName: string): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Validates the npm registry scope used for GitHub Packages authentication.
+ */
+export function validateRegistryScope(registryScope: string): string {
+  if (!REGISTRY_SCOPE_PATTERN.test(registryScope)) {
+    throw new Error(
+      `Invalid registry scope "${registryScope}". Expected lowercase npm scope characters only.`,
+    );
+  }
+
+  return registryScope;
 }
 
 /**
