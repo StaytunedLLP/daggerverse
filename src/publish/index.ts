@@ -23,7 +23,7 @@ import {
   STRICT_SHELL_HEADER,
 } from "../shared/constants.js";
 import { createBaseNodeContainer, withNpmCache } from "../shared/container.js";
-import { shellQuote } from "../shared/path-utils.js";
+import { resolveWorkspacePath, shellQuote } from "../shared/path-utils.js";
 import {
   requirePackageLock,
   withFullSource,
@@ -109,13 +109,13 @@ async function syncPrVersion(
     "-lc",
     [
       STRICT_SHELL_HEADER,
-      `cd ${shellQuote(SYNC_WORKSPACE)}`,
+      `cd ${shellQuote(resolveWorkspacePath(SYNC_WORKSPACE, packagePath))}`,
       `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
     ].join("\n"),
   ]);
 
   await exportUpdatedManifestFiles(
-    container.directory(SYNC_WORKSPACE),
+    container.directory(resolveWorkspacePath(SYNC_WORKSPACE, packagePath)),
     exportPath,
     packagePath,
   );
