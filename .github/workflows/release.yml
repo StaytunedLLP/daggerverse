@@ -70,8 +70,26 @@ jobs:
             exit 0
           fi
 
+          VERSION=$(node <<'NODE'
+          const fs = require("node:fs");
+
+          try {
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+
+            if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+              throw new Error("package.json is missing a non-empty string version field.");
+            }
+
+            process.stdout.write(pkg.version);
+          } catch (error) {
+            console.error(`Failed to read package.json version: ${error.message}`);
+            process.exit(1);
+          }
+          NODE
+          )
+
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Commit synchronized version
         if: github.event_name == 'pull_request' && steps.pr_version_changes.outputs.changed == 'true'
@@ -112,6 +130,22 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node <<'NODE'
+          const fs = require("node:fs");
+
+          try {
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+
+            if (typeof pkg.version !== "string" || pkg.version.length === 0) {
+              throw new Error("package.json is missing a non-empty string version field.");
+            }
+
+            process.stdout.write(pkg.version);
+          } catch (error) {
+            console.error(`Failed to read package.json version: ${error.message}`);
+            process.exit(1);
+          }
+          NODE
+          )
           git tag -a "v$VERSION" -m "Release v$VERSION"
           git push origin "v$VERSION"
