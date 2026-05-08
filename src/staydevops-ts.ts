@@ -474,7 +474,7 @@ export class StaydevopsTs {
    * ahead of the latest base branch patch version without overwriting manual major/minor bumps.
    *
    * Use `publish` on the main branch to validate the canonical package version, detect registry
-   * conflicts, and publish the package. Git tags must be created by GitHub Actions after publish.
+   * conflicts, publish the package, and create the release tag from inside the Dagger container.
    *
    * This flow assumes branch protection requires pull requests to be up to date before merging.
    *

@@ -1,5 +1,3 @@
-import path from "node:path";
-import { Directory } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
   ensureFileExistsAtPath,
@@ -8,7 +6,7 @@ import {
   nextPatchVersion,
   parseExactVersion,
   readBaseBranchPackageJson,
-  readPackageJson,
+  readPackageJsonAtPath,
   validateRegistryScope,
 } from "./helpers.js";
 import {
@@ -18,12 +16,11 @@ import {
   SyncPrVersionResult,
 } from "./types.js";
 import {
-  DEFAULT_SOURCE_EXCLUDES,
   DEFAULT_WORKSPACE,
   STRICT_SHELL_HEADER,
 } from "../shared/constants.js";
 import { createBaseNodeContainer, withNpmCache } from "../shared/container.js";
-import { shellQuote } from "../shared/path-utils.js";
+import { resolveWorkspacePath, shellQuote } from "../shared/path-utils.js";
 import {
   requirePackageLock,
   withFullSource,
@@ -47,18 +44,6 @@ function resolveRegistryScope(
   );
 }
 
-async function exportUpdatedManifestFiles(
-  updatedWorkspace: Directory,
-): Promise<void> {
-  // Dagger mutates files inside an isolated workspace snapshot, but the workflow
-  // can only commit files that exist in the checked-out repository on disk.
-  await updatedWorkspace
-    .filter({
-      include: ["package.json", "package-lock.json"],
-    })
-    .export(path.resolve(process.cwd()));
-}
-
 async function syncPrVersion(
   options: ReleasePackageOptions,
 ): Promise<SyncPrVersionResult> {
@@ -71,9 +56,9 @@ async function syncPrVersion(
     baseBranch,
     packagePath,
   );
-  const manifest = await readPackageJson(options.source);
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
 
-  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
   parseExactVersion(mainManifest.version);
   parseExactVersion(manifest.version);
 
@@ -88,25 +73,40 @@ async function syncPrVersion(
     };
   }
 
+  if (!options.prBranch || options.prBranch.trim().length === 0) {
+    throw new Error("A pull request branch name is required to sync PR versions.");
+  }
+
   const newVersion = nextPatchVersion(mainManifest.version);
   let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
 
   container = withNpmCache(container);
-  container = withLockfilesOnly(container, options.source, {
+  container = withFullSource(container, options.source, {
+    workspace: SYNC_WORKSPACE,
+    exclude: ["dagger", "dist", "node_modules"],
+  });
+  container = requirePackageLock(container, packagePath, {
     workspace: SYNC_WORKSPACE,
   });
-  container = requirePackageLock(container, ".", { workspace: SYNC_WORKSPACE });
+  container = container.withSecretVariable("GITHUB_TOKEN", options.githubToken);
   container = container.withExec([
     "bash",
     "-lc",
     [
       STRICT_SHELL_HEADER,
-      `cd ${shellQuote(SYNC_WORKSPACE)}`,
+      `cd ${shellQuote(resolveWorkspacePath(SYNC_WORKSPACE, packagePath))}`,
       `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
+      `cd ${shellQuote(SYNC_WORKSPACE)}`,
+      `git config user.name "github-actions[bot]"`,
+      `git config user.email "41898282+github-actions[bot]@users.noreply.github.com"`,
+      `git remote set-url origin "https://x-access-token:\${GITHUB_TOKEN}@github.com/${options.repoOwner}/${options.repoName}.git"`,
+      `git add ${shellQuote(resolveWorkspacePath(SYNC_WORKSPACE, packagePath) + "/package.json")} ${shellQuote(resolveWorkspacePath(SYNC_WORKSPACE, packagePath) + "/package-lock.json")}`,
+      `git commit -m ${shellQuote(`chore(release): bump version to v${newVersion}`)}`,
+      `git push origin "HEAD:${options.prBranch}"`,
     ].join("\n"),
   ]);
 
-  await exportUpdatedManifestFiles(container.directory(SYNC_WORKSPACE));
+  await container.sync();
 
   return {
     action: "sync-pr-version",
@@ -116,19 +116,21 @@ async function syncPrVersion(
     currentVersion: manifest.version,
     newVersion,
     changed: true,
+    committed: true,
   };
 }
 
 async function publishRelease(
   options: ReleasePackageOptions,
 ): Promise<PublishPackageResult> {
-  const manifest = await readPackageJson(options.source);
+  const packagePath = options.packagePath ?? ".";
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
   const registryScope = resolveRegistryScope(
     manifest.name,
     options.registryScope,
   );
 
-  await ensureFileExistsAtPath(options.source, ".", "package-lock.json");
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
   parseExactVersion(manifest.version);
 
   if (
@@ -147,21 +149,24 @@ async function publishRelease(
   let container = createBaseNodeContainer();
 
   container = withNpmCache(container);
-  container = withLockfilesOnly(container, options.source);
+  container = withLockfilesOnly(container, options.source, {
+    workspace: DEFAULT_WORKSPACE,
+    packagePaths: packagePath,
+  });
   container = withNpmAuth(container, options.githubToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
   });
-  container = withInstalledDependencies(container, ".", {
+  container = withInstalledDependencies(container, packagePath, {
     workspace: DEFAULT_WORKSPACE,
     npmCiArgs: ["--workspaces=false"],
   });
   // Reapply npm auth after copying the full source in case the repository ships its own .npmrc.
   container = withFullSource(container, options.source, {
-    exclude: DEFAULT_SOURCE_EXCLUDES,
+    exclude: ["dagger", "dist", "node_modules"],
   });
-  container = requirePackageLock(container);
+  container = requirePackageLock(container, packagePath);
   container = withNpmAuth(container, options.githubToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
@@ -177,12 +182,28 @@ async function publishRelease(
     ].join("\n"),
   ]);
 
+  container = container.withSecretVariable("GITHUB_TOKEN", options.githubToken);
+  container = container.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(DEFAULT_WORKSPACE)}`,
+      `git config user.name "github-actions[bot]"`,
+      `git config user.email "41898282+github-actions[bot]@users.noreply.github.com"`,
+      `git remote set-url origin "https://x-access-token:\${GITHUB_TOKEN}@github.com/${options.repoOwner}/${options.repoName}.git"`,
+      `git tag -a ${shellQuote(`v${manifest.version}`)} -m ${shellQuote(`Release v${manifest.version}`)}`,
+      `git push origin ${shellQuote(`v${manifest.version}`)}`,
+    ].join("\n"),
+  ]);
+
   await container.sync();
 
   return {
     action: "publish",
     packageName: manifest.name,
     publishedVersion: manifest.version,
+    tagged: true,
   };
 }
 
