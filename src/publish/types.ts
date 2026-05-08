@@ -71,12 +71,17 @@ export interface SyncPrVersionResult {
   currentVersion: string;
   newVersion?: string;
   changed: boolean;
+  committed: boolean;
+  pushedBranch?: string;
+  commitSha?: string;
 }
 
 export interface PublishPackageResult {
   action: "publish";
   packageName: string;
   publishedVersion: string;
+  tagged: boolean;
+  tagName?: string;
 }
 
 export type ReleasePackageResult =

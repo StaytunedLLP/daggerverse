@@ -114,7 +114,7 @@ dagger call -m github.com/StaytunedLLP/daggerverse release-package \
 
 - `release-package --action=sync-pr-version` compares the PR version against `main` and bumps to `main + 1` when needed.
 - `release-package --action=publish` only publishes the exact version already present in `package.json`.
-- Git tags must be created by GitHub Actions after a successful publish.
+- The module commits and pushes PR version bumps, and it pushes the release tag after a successful publish.
 
 ## When a GitHub token is needed
 
