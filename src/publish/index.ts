@@ -281,6 +281,21 @@ async function publishRelease(
     "-lc",
     [
       STRICT_SHELL_HEADER,
+      `package_dir=${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
+      "mkdir -p \"$package_dir\"",
+      "cat > \"$package_dir/.npmrc\" <<'EOF'",
+      "registry=https://npm.pkg.github.com",
+      `@${registryScope}:registry=https://npm.pkg.github.com`,
+      "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+      "always-auth=true",
+      "EOF",
+    ].join("\n"),
+  ]);
+  container = container.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
       `cd ${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
       "npm publish --registry=https://npm.pkg.github.com --tag latest",
     ].join("\n"),
