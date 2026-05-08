@@ -23,7 +23,6 @@ import {
   gitDiffStaged,
 } from "./git/index.js";
 import { releasePackage } from "./publish/index.js";
-import type { ReleasePackageAction } from "./publish/types.js";
 import { runPlaywrightTests } from "./playwright/index.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
@@ -493,7 +492,7 @@ export class StaydevopsTs {
    */
   @func({ cache: "never" })
   async releasePackage(
-    action: ReleasePackageAction,
+    action: string,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
     githubToken: Secret,
@@ -503,6 +502,12 @@ export class StaydevopsTs {
     baseBranch?: string,
     prBranch?: string,
   ): Promise<string> {
+    if (action !== "sync-pr-version" && action !== "publish") {
+      throw new Error(
+        `Unsupported release action "${action}". Expected "sync-pr-version" or "publish".`,
+      );
+    }
+
     return releasePackage({
       action,
       source,
