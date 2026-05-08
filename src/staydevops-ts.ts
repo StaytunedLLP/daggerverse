@@ -486,6 +486,7 @@ export class StaydevopsTs {
    * @param registryScope - The organization scope for the npm package. Defaults to the package scope.
    * @param baseBranch - Authoritative base branch for PR version synchronization. Defaults to `main`.
    * @param packagePath - Repo-relative path to the package folder on the base branch. Defaults to the repository root.
+   * @param exportPath - Host path where PR sync file changes should be exported. Defaults to the current directory.
    * @param prBranch - Pull request branch name being synchronized.
    *
    * @example
@@ -502,6 +503,7 @@ export class StaydevopsTs {
     registryScope?: string,
     baseBranch?: string,
     packagePath?: string,
+    exportPath?: string,
     prBranch?: string,
   ): Promise<string> {
     if (action !== "sync-pr-version" && action !== "publish") {
@@ -519,6 +521,7 @@ export class StaydevopsTs {
       registryScope,
       baseBranch,
       packagePath,
+      exportPath,
       prBranch,
     });
   }

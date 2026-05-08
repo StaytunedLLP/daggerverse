@@ -49,15 +49,14 @@ function resolveRegistryScope(
 
 async function exportUpdatedManifestFiles(
   updatedWorkspace: Directory,
+  exportPath: string,
   packagePath: string,
 ): Promise<void> {
-  // Dagger mutates files inside an isolated workspace snapshot, but the workflow
-  // can only commit files that exist in the checked-out repository on disk.
   await updatedWorkspace
     .filter({
       include: ["package.json", "package-lock.json"],
     })
-    .export(path.resolve(process.cwd(), packagePath));
+    .export(path.resolve(exportPath, packagePath));
 }
 
 async function syncPrVersion(
@@ -94,6 +93,7 @@ async function syncPrVersion(
   }
 
   const newVersion = nextPatchVersion(mainManifest.version);
+  const exportPath = options.exportPath ?? process.cwd();
   let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
 
   container = withNpmCache(container);
@@ -109,13 +109,14 @@ async function syncPrVersion(
     "-lc",
     [
       STRICT_SHELL_HEADER,
-      `cd ${shellQuote(packagePath === "." ? SYNC_WORKSPACE : `${SYNC_WORKSPACE}/${packagePath}`)}`,
+      `cd ${shellQuote(SYNC_WORKSPACE)}`,
       `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
     ].join("\n"),
   ]);
 
   await exportUpdatedManifestFiles(
     container.directory(SYNC_WORKSPACE),
+    exportPath,
     packagePath,
   );
 

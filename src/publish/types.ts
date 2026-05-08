@@ -47,6 +47,12 @@ export interface ReleasePackageOptions {
   packagePath?: string;
 
   /**
+   * Host filesystem path where synchronized package files should be exported.
+   * Defaults to the current working directory.
+   */
+  exportPath?: string;
+
+  /**
    * Pull request branch being synchronized.
    */
   prBranch?: string;
@@ -71,7 +77,6 @@ export interface SyncPrVersionResult {
   currentVersion: string;
   newVersion?: string;
   changed: boolean;
-  committed?: boolean;
 }
 
 export interface PublishPackageResult {
