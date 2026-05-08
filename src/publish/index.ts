@@ -59,6 +59,7 @@ function packageRepoPath(packagePath: string): string {
 }
 
 async function pushUpdatedPackageFiles(
+  source: Directory,
   updatedWorkspace: Directory,
   options: ReleasePackageOptions,
   commitMessage: string,
@@ -75,15 +76,21 @@ async function pushUpdatedPackageFiles(
     .container()
     .from("alpine/git:latest")
     .withSecretVariable("GITHUB_TOKEN", options.githubToken)
-    .withDirectory("/updated", updatedWorkspace.filter({ include: ["package.json", "package-lock.json"] }))
+    .withDirectory(GIT_REPO_ROOT, source)
+    .withDirectory(
+      "/updated",
+      updatedWorkspace.filter({ include: ["package.json", "package-lock.json"] }),
+    )
     .withExec([
       "sh",
       "-c",
       [
         "set -eu",
-        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${options.repoOwner}/${options.repoName}.git"`,
-        `git clone --branch ${shellQuote(options.prBranch)} --single-branch "$repo_url" ${shellQuote(GIT_REPO_ROOT)}`,
-        `mkdir -p ${shellQuote(repoPath)}`,
+        `cd ${shellQuote(GIT_REPO_ROOT)}`,
+        `test -d .git || { echo "Missing git metadata in source checkout." >&2; exit 1; }`,
+        `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/${options.repoOwner}/${options.repoName}.git"`,
+        `git remote set-url origin "$repo_url"`,
+        `git checkout -B ${shellQuote(options.prBranch)}`,
         `cp /updated/package.json ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
         `cp /updated/package-lock.json ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
         `cd ${shellQuote(packagePathWorkspace)}`,
@@ -184,6 +191,7 @@ async function syncPrVersion(
   ]);
 
   const { commitSha } = await pushUpdatedPackageFiles(
+    options.source,
     container.directory(SYNC_WORKSPACE),
     options,
     `chore(release): bump version to v${newVersion}`,
