@@ -58,6 +58,19 @@ function packageRepoPath(packagePath: string): string {
   return packagePath === "." ? GIT_REPO_ROOT : path.posix.join(GIT_REPO_ROOT, packagePath);
 }
 
+function packageUpdatedPath(packagePath: string, fileName: string): string {
+  return packagePath === "." ? fileName : path.posix.join(packagePath, fileName);
+}
+
+function packageWorkspaceFilePath(
+  packagePath: string,
+  fileName: string,
+): string {
+  return packagePath === "."
+    ? fileName
+    : path.posix.join(packagePath, fileName);
+}
+
 async function pushUpdatedPackageFiles(
   source: Directory,
   updatedWorkspace: Directory,
@@ -71,16 +84,18 @@ async function pushUpdatedPackageFiles(
   const packagePath = options.packagePath ?? ".";
   const repoPath = packageRepoPath(packagePath);
   const packagePathWorkspace = packageWorkspacePath(packagePath);
+  const packageJsonPath = packageUpdatedPath(packagePath, "package.json");
+  const packageLockPath = packageUpdatedPath(packagePath, "package-lock.json");
+  const updatedFilter = {
+    include: [packageJsonPath, packageLockPath],
+  };
 
   let container = dag
     .container()
     .from("alpine/git:latest")
     .withSecretVariable("GITHUB_TOKEN", options.githubToken)
     .withDirectory(GIT_REPO_ROOT, source)
-    .withDirectory(
-      "/updated",
-      updatedWorkspace.filter({ include: ["package.json", "package-lock.json"] }),
-    )
+    .withDirectory("/updated", updatedWorkspace.filter(updatedFilter))
     .withExec([
       "sh",
       "-c",
@@ -91,17 +106,17 @@ async function pushUpdatedPackageFiles(
         `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/${options.repoOwner}/${options.repoName}.git"`,
         `git remote set-url origin "$repo_url"`,
         `git checkout -B ${shellQuote(options.prBranch)}`,
-        `cp /updated/package.json ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
-        `cp /updated/package-lock.json ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
+        `cp /updated/${shellQuote(packageJsonPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
+        `cp /updated/${shellQuote(packageLockPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
         `cd ${shellQuote(packagePathWorkspace)}`,
-        `if git diff --quiet -- package.json package-lock.json; then`,
+        `if git diff --quiet -- ${shellQuote(packageWorkspaceFilePath(packagePath, "package.json"))} ${shellQuote(packageWorkspaceFilePath(packagePath, "package-lock.json"))}; then`,
         `  echo "No release files changed, skipping commit."`,
         `  git rev-parse HEAD > /tmp/commit-sha`,
         `  exit 0`,
         `fi`,
         `git config user.name ${shellQuote(GIT_USER_NAME)}`,
         `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,
-        `git add package.json package-lock.json`,
+        `git add ${shellQuote(packageWorkspaceFilePath(packagePath, "package.json"))} ${shellQuote(packageWorkspaceFilePath(packagePath, "package-lock.json"))}`,
         `git commit -m ${shellQuote(commitMessage)}`,
         `git push origin HEAD:${shellQuote(options.prBranch)}`,
         `git rev-parse HEAD > /tmp/commit-sha`,
