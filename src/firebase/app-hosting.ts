@@ -216,16 +216,40 @@ export async function deployFirebaseApphostingProject(
   ).withExec(backendExistsCommand(projectId, backendId, appId, region));
 
   const deployed = authenticated.withExec([
-    "firebase",
-    "deploy",
-    "--only",
-    `apphosting:${backendId}`,
-    "--project",
-    projectId,
-    "--non-interactive",
-    "--force",
-  ]);
+  "bash",
+  "-c",
+  `
+set -euo pipefail
 
+ATTEMPT=1
+MAX_ATTEMPTS=5
+
+until firebase deploy \
+  --only apphosting:${backendId} \
+  --project ${projectId} \
+  --non-interactive \
+  --force
+do
+
+  if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+    echo "Deployment failed after retries."
+    exit 1
+  fi
+
+  SLEEP_TIME=$((ATTEMPT * 10))
+
+  echo "Deployment failed due to concurrent run or transient issue."
+  echo "Retrying in \${SLEEP_TIME}s..."
+
+  sleep \${SLEEP_TIME}
+
+  ATTEMPT=$((ATTEMPT + 1))
+done
+
+echo "Deployment completed successfully."
+`,
+]);
+  
   const backendJson = await deployed
     .withExec([
       "firebase",
