@@ -2,9 +2,9 @@ import path from "node:path";
 import { Directory } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
-  compareVersions,
   ensureFileExists,
   extractScope,
+  compareVersions,
   nextPatchVersion,
   parseExactVersion,
   readBaseBranchPackageJson,
@@ -32,7 +32,6 @@ import {
   withNpmAuth,
 } from "../shared/npm.js";
 
-const DEFAULT_BASE_BRANCH = "main";
 const SYNC_WORKSPACE = "/tmp/release-package-sync";
 
 function serializeResult(result: ReleasePackageResult): string {
@@ -63,26 +62,26 @@ async function exportUpdatedManifestFiles(
 async function syncPrVersion(
   options: ReleasePackageOptions,
 ): Promise<SyncPrVersionResult> {
-  const baseBranch = options.baseBranch ?? DEFAULT_BASE_BRANCH;
+  const baseBranch = options.baseBranch ?? "main";
   const mainManifest = await readBaseBranchPackageJson(
     options.githubToken,
     options.repoOwner,
     options.repoName,
     baseBranch,
   );
-  const prManifest = await readPackageJson(options.source);
+  const manifest = await readPackageJson(options.source);
 
   await ensureFileExists(options.source, "package-lock.json");
   parseExactVersion(mainManifest.version);
-  parseExactVersion(prManifest.version);
+  parseExactVersion(manifest.version);
 
-  if (compareVersions(prManifest.version, mainManifest.version) > 0) {
+  if (compareVersions(manifest.version, mainManifest.version) > 0) {
     return {
       action: "sync-pr-version",
       baseBranch,
       prBranch: options.prBranch,
       mainVersion: mainManifest.version,
-      prVersion: prManifest.version,
+      currentVersion: manifest.version,
       changed: false,
     };
   }
@@ -91,8 +90,8 @@ async function syncPrVersion(
   let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
 
   container = withNpmCache(container);
-  container = withFullSource(container, options.source, {
-    exclude: DEFAULT_SOURCE_EXCLUDES,
+  container = withLockfilesOnly(container, options.source, {
+    workspace: SYNC_WORKSPACE,
   });
   container = requirePackageLock(container, ".", { workspace: SYNC_WORKSPACE });
   container = container.withExec([
@@ -101,7 +100,7 @@ async function syncPrVersion(
     [
       STRICT_SHELL_HEADER,
       `cd ${shellQuote(SYNC_WORKSPACE)}`,
-      `npm version ${shellQuote(newVersion)} --no-git-tag-version`,
+      `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
     ].join("\n"),
   ]);
 
@@ -112,9 +111,9 @@ async function syncPrVersion(
     baseBranch,
     prBranch: options.prBranch,
     mainVersion: mainManifest.version,
-    prVersion: prManifest.version,
-    changed: true,
+    currentVersion: manifest.version,
     newVersion,
+    changed: true,
   };
 }
 

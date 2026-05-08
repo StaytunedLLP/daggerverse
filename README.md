@@ -28,7 +28,7 @@ A collection of repository validation tools:
 - `git-diff`: retrieves changed files based on mode (`staged`, `previous`, `between`)
 - `fb-apphosting`: performs actions (`deploy`, `delete`) on Firebase App Hosting backends
 - `fb-webhosting`: installs, builds, and deploys a Firebase web hosting project
-- `release-package`: synchronizes PR package versions or publishes the canonical main-branch package release
+- `release-package`: compares PR versions against `main` and bumps to `main + 1`, or publishes the canonical main-branch package release
 
 ## Usage
 
@@ -88,7 +88,7 @@ dagger call -m github.com/StaytunedLLP/daggerverse fb-webhosting \
   --gcp-credentials=env:GCP_CREDENTIALS
 ```
 
-Synchronize a pull request package version against `main`:
+Compare a pull request against `main` and bump to the next safe patch version:
 
 ```bash
 dagger call -m github.com/StaytunedLLP/daggerverse release-package \
@@ -112,10 +112,9 @@ dagger call -m github.com/StaytunedLLP/daggerverse release-package \
 
 ## Release pipeline assumptions
 
-- `release-package --action=sync-pr-version` updates `package.json` and `package-lock.json` only when the PR version is less than or equal to the latest `main` version.
+- `release-package --action=sync-pr-version` compares the PR version against `main` and bumps to `main + 1` when needed.
 - `release-package --action=publish` only publishes the exact version already present in `package.json`.
 - Git tags must be created by GitHub Actions after a successful publish.
-- Branch protection must enable **Require branches to be up to date before merging** to avoid duplicate release versions.
 
 ## When a GitHub token is needed
 
@@ -165,4 +164,4 @@ This repository also exports plain TypeScript helpers for internal reuse:
 - `gitDiffStaged`
 - `gitDiffPrevious`
 - `gitDiffBetweenCommits`
-- `publishPackage`
+- `releasePackage`

@@ -62,9 +62,9 @@ export interface SyncPrVersionResult {
   baseBranch: string;
   prBranch?: string;
   mainVersion: string;
-  prVersion: string;
-  changed: boolean;
+  currentVersion: string;
   newVersion?: string;
+  changed: boolean;
 }
 
 export interface PublishPackageResult {

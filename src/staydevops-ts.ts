@@ -185,7 +185,7 @@ export class Checks {
  * - 🔍 **Repository Health**: Automated linting, formatting, and build verification.
  * - 🧪 **Advanced Testing**: Integrated Playwright E2E testing with built-in "Affected Test" discovery.
  * - 🚀 **Firebase Deployment**: Streamlined pipelines for Firebase Hosting and App Hosting.
- * - 📦 **Package Release Automation**: Deterministic PR version sync and main-branch npm publishing.
+ * - 📦 **Package Release Automation**: main-aware PR patch bumps and main-branch npm publishing.
  * - 📂 **Git Utilities**: Helpers for discovering changed files and diff ranges.
  *
  * Built with performance and security in mind, this module leverages Dagger's
