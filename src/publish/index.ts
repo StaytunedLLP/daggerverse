@@ -83,7 +83,6 @@ async function pushUpdatedPackageFiles(
 
   const packagePath = options.packagePath ?? ".";
   const repoPath = packageRepoPath(packagePath);
-  const packagePathWorkspace = packageWorkspacePath(packagePath);
   const packageJsonPath = packageUpdatedPath(packagePath, "package.json");
   const packageLockPath = packageUpdatedPath(packagePath, "package-lock.json");
   const updatedFilter = {
@@ -108,15 +107,15 @@ async function pushUpdatedPackageFiles(
         `git checkout -B ${shellQuote(options.prBranch)}`,
         `cp /updated/${shellQuote(packageJsonPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
         `cp /updated/${shellQuote(packageLockPath).replace(/^'|'$/g, "")} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
-        `cd ${shellQuote(packagePathWorkspace)}`,
-        `if git diff --quiet -- ${shellQuote(packageWorkspaceFilePath(packagePath, "package.json"))} ${shellQuote(packageWorkspaceFilePath(packagePath, "package-lock.json"))}; then`,
+        `cd ${shellQuote(repoPath)}`,
+        `if git diff --quiet -- package.json package-lock.json; then`,
         `  echo "No release files changed, skipping commit."`,
         `  git rev-parse HEAD > /tmp/commit-sha`,
         `  exit 0`,
         `fi`,
         `git config user.name ${shellQuote(GIT_USER_NAME)}`,
         `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,
-        `git add ${shellQuote(packageWorkspaceFilePath(packagePath, "package.json"))} ${shellQuote(packageWorkspaceFilePath(packagePath, "package-lock.json"))}`,
+        `git add package.json package-lock.json`,
         `git commit -m ${shellQuote(commitMessage)}`,
         `git push origin HEAD:${shellQuote(options.prBranch)}`,
         `git rev-parse HEAD > /tmp/commit-sha`,
