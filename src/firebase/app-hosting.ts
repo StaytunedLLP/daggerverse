@@ -8,6 +8,7 @@ import {
   GCP_CREDENTIALS_PATH,
 } from "./constants.js";
 import { installFirebaseDependencies } from "./dependencies.js";
+import { shellQuote } from "../shared/path-utils.js";
 
 function withAppHostingAuth(
   container: Container,
@@ -85,7 +86,7 @@ function backendExistsCommand(
   region: string,
   rootDir: string,
 ): string[] {
-  const appFlag = appId ? ` --app ${appId}` : "";
+  const appFlag = appId ? ` --app ${shellQuote(appId)}` : "";
 
   return [
     "bash",
@@ -93,8 +94,8 @@ function backendExistsCommand(
     `
 set -euo pipefail
 
-BACKEND_JSON=$(firebase apphosting:backends:get ${backendId} \
-  --project ${projectId} \
+BACKEND_JSON=$(firebase apphosting:backends:get ${shellQuote(backendId)} \
+  --project ${shellQuote(projectId)} \
   --json 2>/dev/null || true)
 
 if echo "$BACKEND_JSON" | grep -q '"uri"'; then
@@ -109,10 +110,10 @@ else
   MAX_ATTEMPTS=5
 
   until (
-    printf '%s\n' '${rootDir}' | firebase apphosting:backends:create \
-      --backend ${backendId} \
-      --project ${projectId} \
-      --primary-region ${region}${appFlag}
+    printf '%s\n' ${shellQuote(rootDir)} | firebase apphosting:backends:create \
+      --backend ${shellQuote(backendId)} \
+      --project ${shellQuote(projectId)} \
+      --primary-region ${shellQuote(region)}${appFlag}
   )
   do
 
@@ -135,8 +136,8 @@ else
   READY_ATTEMPT=1
   READY_MAX_ATTEMPTS=30
 
-  until firebase apphosting:backends:get ${backendId} \
-    --project ${projectId} \
+  until firebase apphosting:backends:get ${shellQuote(backendId)} \
+    --project ${shellQuote(projectId)} \
     --json | grep -q '"uri"'
   do
 
@@ -213,20 +214,20 @@ export async function deployFirebaseApphostingProject(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
-  ).withExec(backendExistsCommand(projectId, backendId, appId, region));
+  ).withExec(backendExistsCommand(projectId, backendId, appId, region, rootDir));
 
   const deployed = authenticated.withExec([
-  "bash",
-  "-c",
-  `
+    "bash",
+    "-c",
+    `
 set -euo pipefail
 
 ATTEMPT=1
 MAX_ATTEMPTS=5
 
 until firebase deploy \
-  --only apphosting:${backendId} \
-  --project ${projectId} \
+  --only apphosting:${shellQuote(backendId)} \
+  --project ${shellQuote(projectId)} \
   --non-interactive \
   --force
 do
@@ -248,7 +249,7 @@ done
 
 echo "Deployment completed successfully."
 `,
-]);
+  ]);
   
   const backendJson = await deployed
     .withExec([
