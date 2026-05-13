@@ -389,13 +389,17 @@ export class StaydevopsTs {
     extraEnv?: Secret,
     nodeAuthToken?: Secret,
     registryScope?: string,
-    buildProfile: FirebaseBuildProfile = "vite",
+    buildProfile = "vite",
     wifProvider = "",
     wifServiceAccount = "",
     wifOidcToken?: Secret,
     wifAudience = "",
     buildBeforeDeploy = false,
   ): Promise<string> {
+    if (buildProfile !== "vite" && buildProfile !== "staystack") {
+      throw new Error("buildProfile must be 'vite' or 'staystack'");
+    }
+
     if (action === "deploy") {
       if (!source) {
         throw new Error("source is required for 'deploy' action");
@@ -413,7 +417,7 @@ export class StaydevopsTs {
           extraEnv,
           nodeAuthToken,
           registryScope,
-          buildProfile,
+          buildProfile as FirebaseBuildProfile,
           wifProvider,
           wifServiceAccount,
           wifOidcToken,
