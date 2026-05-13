@@ -35,7 +35,13 @@ if (fs.existsSync(lockfilePath)) {
   const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
   if (lockfile.packages && typeof lockfile.packages === 'object') {
     for (const key of Object.keys(lockfile.packages)) {
-      if (key === 'src/services' || key.startsWith('src/services/')) {
+      if (
+        key === 'src/services' ||
+        key.startsWith('src/services/') ||
+        key === 'node_modules/@staytunedllp/services' ||
+        key.startsWith('node_modules/@staytunedllp/service-') ||
+        key === 'node_modules/@staytunedllp/staytest-ts'
+      ) {
         delete lockfile.packages[key];
       }
     }
