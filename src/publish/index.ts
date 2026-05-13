@@ -1,153 +1,323 @@
-import { dag } from "@dagger.io/dagger";
+import path from "node:path";
+import { Directory, Secret, dag } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
+  ensureFileExistsAtPath,
   extractScope,
-  getPRNumber,
-  readPackageJson,
-  validateBaseVersion,
+  compareVersions,
+  nextPatchVersion,
+  parseExactVersion,
+  readPackageJsonAtPath,
+  readBaseBranchPackageJson,
+  validateRegistryScope,
 } from "./helpers.js";
-import { PublishOptions, PublishContextType } from "./types.js";
 import {
-  DEFAULT_IMAGE,
+  ReleasePackageOptions,
+  ReleasePackageResult,
+  PublishPackageResult,
+  SyncPrVersionResult,
+} from "./types.js";
+import {
+  DEFAULT_SOURCE_EXCLUDES,
   DEFAULT_WORKSPACE,
   STRICT_SHELL_HEADER,
 } from "../shared/constants.js";
+import { createBaseNodeContainer, withNpmCache } from "../shared/container.js";
 import { shellQuote } from "../shared/path-utils.js";
 import {
+  requirePackageLock,
   withFullSource,
   withInstalledDependencies,
   withLockfilesOnly,
   withNpmAuth,
 } from "../shared/npm.js";
-import { withNpmCache } from "../shared/container.js";
 
-/**
- * Deterministic package publishing logic.
- */
-export async function publishPackage(options: PublishOptions): Promise<string> {
-  const {
-    source,
-    ref,
-    eventName,
-    inputBranch,
-    releasePrNumber,
-    githubToken,
-    repoOwner,
-    repoName,
-  } = options;
+const SYNC_WORKSPACE = "/tmp/release-package-sync";
+const GIT_REPO_ROOT = "/tmp/release-package-repo";
+const GIT_USER_NAME = "github-actions[bot]";
+const GIT_USER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com";
 
-  // 1. Resolve Context
-  let context: PublishContextType;
-  if (eventName === "pull_request") {
-    context = "main";
-  } else if (eventName === "workflow_dispatch") {
-    context = releasePrNumber !== undefined ? "main" : "pr";
-    if (context === "pr" && !inputBranch) {
-      throw new Error(
-        "Manual trigger (workflow_dispatch) requires inputBranch.",
-      );
-    }
-  } else {
-    throw new Error(
-      `Unsupported event \"${eventName}\". Allowed events: pull_request, workflow_dispatch.`,
-    );
-  }
+function serializeResult(result: ReleasePackageResult): string {
+  return JSON.stringify(result, null, 2);
+}
 
-  // 2. Read package.json
-  const manifest = await readPackageJson(source);
-  const packageVersion = manifest.version;
-  const packageName = manifest.name;
-
-  // 3. Validate Base Version
-  validateBaseVersion(packageVersion);
-
-  // For merged release-PR publish, use the version in package.json from the merged commit.
-  // For manual PR publish, use the version from the selected PR branch package.json.
-  let baseVersion = packageVersion;
-
-  // 4. Resolve PR Number if needed
-  let prNumber: number | undefined;
-  if (context === "pr" && inputBranch) {
-    prNumber = await getPRNumber(githubToken, repoOwner, repoName, inputBranch);
-  }
-
-  // 5. Generate Final Version
-  let finalVersion: string;
-  let npmTag: string;
-
-  if (context === "main") {
-    finalVersion = packageVersion;
-    npmTag = "latest";
-  } else if (context === "pr" && prNumber !== undefined) {
-    finalVersion = `${baseVersion}-pre-pr${prNumber}`;
-    npmTag = `pr-${prNumber}`;
-  } else {
-    throw new Error("Failed to generate final version: Invalid context state.");
-  }
-
-  // 6. Registry Conflict Check
-  const exists = await checkRegistryVersion(
-    packageName,
-    finalVersion,
-    githubToken,
+function resolveRegistryScope(
+  packageName: string,
+  registryScope?: string,
+): string {
+  return validateRegistryScope(
+    registryScope ?? extractScope(packageName) ?? "staytunedllp",
   );
-  if (exists && context === "pr") {
-    throw new Error(
-      `Version "${finalVersion}" of package "${packageName}" already exists in registry.`,
-    );
+}
+
+function packageWorkspacePath(packagePath: string): string {
+  return packagePath === "." ? SYNC_WORKSPACE : path.posix.join(SYNC_WORKSPACE, packagePath);
+}
+
+function packageRepoPath(packagePath: string): string {
+  return packagePath === "." ? GIT_REPO_ROOT : path.posix.join(GIT_REPO_ROOT, packagePath);
+}
+
+async function pushUpdatedPackageFiles(
+  source: Directory,
+  updatedWorkspace: Directory,
+  options: ReleasePackageOptions,
+  commitMessage: string,
+): Promise<{ commitSha: string }> {
+  if (!options.prBranch) {
+    throw new Error("prBranch is required when committing the PR version bump.");
   }
 
-  // 7. Prepare Container and Publish
-  const registryScope =
-    options.registryScope || extractScope(packageName) || "staytunedllp";
-  const releaseTag = `v${finalVersion}`;
+  const packagePath = options.packagePath ?? ".";
+  const repoPath = packageRepoPath(packagePath);
+  const packageJsonPath = packagePath === "."
+    ? "package.json"
+    : path.posix.join(packagePath, "package.json");
+  const packageLockPath = packagePath === "."
+    ? "package-lock.json"
+    : path.posix.join(packagePath, "package-lock.json");
+  const updatedFilter = {
+    include: [packageJsonPath, packageLockPath],
+  };
 
   let container = dag
     .container()
-    .from(DEFAULT_IMAGE)
-    .withWorkdir(DEFAULT_WORKSPACE);
+    .from("alpine/git:latest")
+    .withSecretVariable("GITHUB_TOKEN", options.githubToken)
+    .withDirectory(GIT_REPO_ROOT, source)
+    .withDirectory("/updated", updatedWorkspace.filter(updatedFilter))
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `cd ${shellQuote(GIT_REPO_ROOT)}`,
+        `test -d .git || { echo "Missing git metadata in source checkout." >&2; exit 1; }`,
+        `repo_owner=${shellQuote(options.repoOwner)}`,
+        `repo_name=${shellQuote(options.repoName)}`,
+        `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/$repo_owner/$repo_name.git"`,
+        `git remote set-url origin "$repo_url"`,
+        `git checkout -B ${shellQuote(options.prBranch)}`,
+        `cp ${shellQuote(path.posix.join("/updated", packageJsonPath))} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
+        `cp ${shellQuote(path.posix.join("/updated", packageLockPath))} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
+        `cd ${shellQuote(repoPath)}`,
+        `if git diff --quiet -- package.json package-lock.json; then`,
+        `  echo "No release files changed, skipping commit."`,
+        `  git rev-parse HEAD > /tmp/commit-sha`,
+        `  exit 0`,
+        `fi`,
+        `git config user.name ${shellQuote(GIT_USER_NAME)}`,
+        `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,
+        `git add package.json package-lock.json`,
+        `git commit -m ${shellQuote(commitMessage)}`,
+        `git push origin HEAD:${shellQuote(options.prBranch)}`,
+        `git rev-parse HEAD > /tmp/commit-sha`,
+      ].join("\n"),
+    ]);
 
-  // Apply Volume Cache
+  const commitSha = await container.file("/tmp/commit-sha").contents();
+  return { commitSha: commitSha.trim() };
+}
+
+async function pushReleaseTag(
+  options: ReleasePackageOptions,
+  version: string,
+): Promise<string> {
+  const tagName = `v${version}`;
+
+  await dag
+    .container()
+    .from("alpine/git:latest")
+    .withSecretVariable("GITHUB_TOKEN", options.githubToken)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `repo_owner=${shellQuote(options.repoOwner)}`,
+        `repo_name=${shellQuote(options.repoName)}`,
+        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/$repo_owner/$repo_name.git"`,
+        `git clone --branch ${shellQuote(options.baseBranch ?? "main")} --single-branch --depth=1 "$repo_url" ${shellQuote(GIT_REPO_ROOT)}`,
+        `cd ${shellQuote(GIT_REPO_ROOT)}`,
+        `git config user.name ${shellQuote(GIT_USER_NAME)}`,
+        `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,
+        `git tag -a ${shellQuote(tagName)} -m ${shellQuote(`Release ${tagName}`)}`,
+        `git push origin ${shellQuote(tagName)}`,
+      ].join("\n"),
+    ])
+    .sync();
+
+  return tagName;
+}
+
+async function syncPrVersion(
+  options: ReleasePackageOptions,
+): Promise<SyncPrVersionResult> {
+  const baseBranch = options.baseBranch ?? "main";
+  const packagePath = options.packagePath ?? ".";
+  const mainManifest = await readBaseBranchPackageJson(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    baseBranch,
+    packagePath,
+  );
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  parseExactVersion(mainManifest.version);
+  parseExactVersion(manifest.version);
+
+  if (compareVersions(manifest.version, mainManifest.version) > 0) {
+    return {
+      action: "sync-pr-version",
+      baseBranch,
+      prBranch: options.prBranch,
+      mainVersion: mainManifest.version,
+      currentVersion: manifest.version,
+      changed: false,
+      committed: false,
+    };
+  }
+
+  const newVersion = nextPatchVersion(mainManifest.version);
+  let container = createBaseNodeContainer({ workspace: SYNC_WORKSPACE });
+
   container = withNpmCache(container);
+  container = withLockfilesOnly(container, options.source, {
+    workspace: SYNC_WORKSPACE,
+    packagePaths: packagePath,
+  });
+  container = requirePackageLock(container, packagePath, { workspace: SYNC_WORKSPACE });
+  container = container.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(packageWorkspacePath(packagePath))}`,
+      `npm_config_ignore_scripts=true npm version ${shellQuote(newVersion)} --no-git-tag-version`,
+    ].join("\n"),
+  ]);
 
-  // Lockfile-first Layering
-  container = withLockfilesOnly(container, source);
+  const { commitSha } = await pushUpdatedPackageFiles(
+    options.source,
+    container.directory(SYNC_WORKSPACE),
+    options,
+    `chore(release): bump version to v${newVersion}`,
+  );
 
-  // Authentication
-  container = withNpmAuth(container, githubToken, {
+  return {
+    action: "sync-pr-version",
+    baseBranch,
+    prBranch: options.prBranch,
+    mainVersion: mainManifest.version,
+    currentVersion: manifest.version,
+    newVersion,
+    changed: true,
+    committed: true,
+    pushedBranch: options.prBranch,
+    commitSha,
+  };
+}
+
+async function publishRelease(
+  options: ReleasePackageOptions,
+): Promise<PublishPackageResult> {
+  const packagePath = options.packagePath ?? ".";
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+  const registryScope = resolveRegistryScope(
+    manifest.name,
+    options.registryScope,
+  );
+
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  parseExactVersion(manifest.version);
+
+  if (
+    await checkRegistryVersion(
+      manifest.name,
+      manifest.version,
+      options.githubToken,
+      registryScope,
+    )
+  ) {
+    throw new Error(
+      `Version "${manifest.version}" of package "${manifest.name}" already exists in the registry.`,
+    );
+  }
+
+  let container = createBaseNodeContainer();
+
+  container = withNpmCache(container);
+  container = withLockfilesOnly(container, options.source, {
+    packagePaths: packagePath,
+  });
+  container = withNpmAuth(container, options.githubToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
   });
-
-  // Install Dependencies (Layered Cache)
-  container = withInstalledDependencies(container, ".", {
+  container = withInstalledDependencies(container, packagePath, {
+    workspace: DEFAULT_WORKSPACE,
     npmCiArgs: ["--workspaces=false"],
   });
-
-  // Add Full Source
-  container = withFullSource(container, source);
-
-  const skipNpmPublish = exists && context === "main";
-
-  // Override Version and Publish
+  // Reapply npm auth after copying the full source in case the repository ships its own .npmrc.
+  container = withFullSource(container, options.source, {
+    exclude: DEFAULT_SOURCE_EXCLUDES,
+  });
+  container = requirePackageLock(container, packagePath);
+  container = withNpmAuth(container, options.githubToken, {
+    registryScope,
+    workspace: DEFAULT_WORKSPACE,
+    npmrcPaths: ".",
+  });
   container = container.withExec([
     "bash",
-    "-c",
-    `${STRICT_SHELL_HEADER}
-    # Update package.json version locally only
-    node -e '
-      const fs = require("fs");
-      const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
-      pkg.version = "${finalVersion}";
-      fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-    '
-    npm run build:publish
-    if [[ "${skipNpmPublish}" != "true" ]]; then
-      npm publish --tag ${shellQuote(npmTag)}
-    fi
-    `,
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `package_dir=${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
+      "mkdir -p \"$package_dir\"",
+      "cat > \"$package_dir/.npmrc\" <<'EOF'",
+      "registry=https://npm.pkg.github.com",
+      `@${registryScope}:registry=https://npm.pkg.github.com`,
+      "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+      "always-auth=true",
+      "EOF",
+    ].join("\n"),
+  ]);
+  container = container.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
+      "npm publish --registry=https://npm.pkg.github.com --tag latest",
+    ].join("\n"),
   ]);
 
-  return container.stdout();
+  await container.sync();
+  const tagName = await pushReleaseTag(options, manifest.version);
+
+  return {
+    action: "publish",
+    packageName: manifest.name,
+    publishedVersion: manifest.version,
+    tagged: true,
+    tagName,
+  };
+}
+
+/**
+ * Production release pipeline with PR version synchronization and main-only publishing.
+ */
+export async function releasePackage(
+  options: ReleasePackageOptions,
+): Promise<string> {
+  const result =
+    options.action === "sync-pr-version"
+      ? await syncPrVersion(options)
+      : await publishRelease(options);
+
+  return serializeResult(result);
 }

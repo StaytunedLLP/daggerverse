@@ -23,7 +23,7 @@ import {
   gitDiffPrevious,
   gitDiffStaged,
 } from "./git/index.js";
-import { publishPackage } from "./publish/index.js";
+import { releasePackage } from "./publish/index.js";
 import { runPlaywrightTests } from "./playwright/index.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
@@ -40,8 +40,9 @@ export class Checks {
   private async runDefaultCheck(
     source: Directory,
     mode: CheckMode,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await runNodeChecks(source, undefined, {
+    await runNodeChecks(source, nodeAuthToken, {
       [mode]: true,
     });
   }
@@ -87,6 +88,7 @@ export class Checks {
    * Validates repository formatting using the standard `npm run format:check` command.
    *
    * @param source - Repository source directory to validate.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks format --source .
@@ -99,14 +101,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "format");
+    await this.runDefaultCheck(source, "format", nodeAuthToken);
   }
 
   /**
    * Executes the repository linter using the standard `npm run lint` command.
    *
    * @param source - Repository source directory to lint.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks lint --source .
@@ -119,14 +123,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "lint");
+    await this.runDefaultCheck(source, "lint", nodeAuthToken);
   }
 
   /**
    * Verifies that the repository builds successfully using the `npm run build` command.
    *
    * @param source - Repository source directory to build.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks build --source .
@@ -139,14 +145,16 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "build");
+    await this.runDefaultCheck(source, "build", nodeAuthToken);
   }
 
   /**
    * Executes the standard repository test suite using the `npm run test` command.
    *
    * @param source - Repository source directory to test.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    *
    * @example
    * dagger call checks test --source .
@@ -159,8 +167,9 @@ export class Checks {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "test");
+    await this.runDefaultCheck(source, "test", nodeAuthToken);
   }
 }
 
@@ -174,7 +183,7 @@ export class Checks {
  * - 🔍 **Repository Health**: Automated linting, formatting, and build verification.
  * - 🧪 **Advanced Testing**: Integrated Playwright E2E testing with built-in "Affected Test" discovery.
  * - 🚀 **Firebase Deployment**: Streamlined pipelines for Firebase Hosting and App Hosting.
- * - 📦 **Package Publishing**: Deterministic npm publishing with automatic GitHub Release integration.
+ * - 📦 **Package Release Automation**: main-aware PR patch bumps and main-branch npm publishing.
  * - 📂 **Git Utilities**: Helpers for discovering changed files and diff ranges.
  *
  * Built with performance and security in mind, this module leverages Dagger's
@@ -488,50 +497,59 @@ export class StaydevopsTs {
   }
 
   /**
-   * Deterministic and secure npm package publishing pipeline.
+   * Production package release pipeline with deterministic PR version sync and main-only publishing.
    *
-   * This function manages the full release lifecycle including:
-   * 1. Version validation and conflict checking against the GitHub Packages registry.
-   * 2. Automated PR-based pre-release versioning (e.g. 1.0.0-pre-pr42).
-   * 3. Collaborative release finalization for merged Pull Requests.
-   * 4. Creation of GitHub Releases and associated git tags.
+   * Use `sync-pr-version` in pull request workflows to keep package.json and package-lock.json
+   * ahead of the latest base branch patch version without overwriting manual major/minor bumps.
+   * When a bump is needed, the function commits and pushes the update back to the PR branch.
    *
-   * @param source - Repository source directory to publish from.
-   * @param ref - The git ref triggering the release (e.g. 'refs/heads/main' or a tag).
-   * @param eventName - The GitHub event name (allowed: 'workflow_dispatch', 'push').
-   * @param githubToken - GitHub Personal Access Token (PAT) with repository and package write scopes.
-   * @param repoOwner - The GitHub organization or user (e.g. 'StaytunedLLP').
+   * Use `publish` on the main branch to validate the canonical package version, detect registry
+   * conflicts, publish the package, and push the release tag.
+   *
+   * This flow assumes branch protection requires pull requests to be up to date before merging.
+   *
+   * @param action - Release pipeline action to run.
+   * @param source - Repository source directory to operate on.
+   * @param githubToken - GitHub token with repository read access and package write access.
+   * @param repoOwner - The GitHub organization or user (for example, `StaytunedLLP`).
    * @param repoName - The repository name.
-   * @param inputBranch - The branch name to target when triggered via manual dispatch.
-   * @param releasePrNumber - The Pull Request number associated with the release (for automated finalization).
-   * @param registryScope - The organization scope for the npm package. Defaults to 'staytunedllp'.
+   * @param registryScope - The organization scope for the npm package. Defaults to the package scope.
+   * @param baseBranch - Authoritative base branch for PR version synchronization. Defaults to `main`.
+   * @param packagePath - Repo-relative path to the package folder on the base branch. Defaults to the repository root.
+   * @param prBranch - Pull request branch name being synchronized.
    *
    * @example
-   * dagger call publish-package --source . --ref "refs/heads/main" --github-token env:GITHUB_TOKEN
+   * dagger call release-package --action sync-pr-version --source . --github-token env:GITHUB_TOKEN
    */
   @func({ cache: "never" })
-  async publishPackage(
+  async releasePackage(
+    action: string,
     @argument({ defaultPath: ".", ignore: ["dagger", "dist", "node_modules"] })
     source: Directory,
-    ref: string,
-    eventName: string,
     githubToken: Secret,
     repoOwner: string,
     repoName: string,
-    inputBranch?: string,
-    releasePrNumber?: number,
     registryScope?: string,
+    baseBranch?: string,
+    packagePath?: string,
+    prBranch?: string,
   ): Promise<string> {
-    return publishPackage({
+    if (action !== "sync-pr-version" && action !== "publish") {
+      throw new Error(
+        `Unsupported release action "${action}". Expected "sync-pr-version" or "publish".`,
+      );
+    }
+
+    return releasePackage({
+      action,
       source,
-      ref,
-      eventName,
-      inputBranch,
-      releasePrNumber,
       githubToken,
       repoOwner,
       repoName,
       registryScope,
+      baseBranch,
+      packagePath,
+      prBranch,
     });
   }
 }
