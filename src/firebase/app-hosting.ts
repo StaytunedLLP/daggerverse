@@ -11,24 +11,50 @@ import {
 import { installFirebaseDependencies } from "./dependencies.js";
 import { shellQuote } from "../shared/path-utils.js";
 
-function withAppRootLockfile(
-  source: Directory,
-  rootDir: string,
-  lockfileSource: Directory,
-): Directory {
-  const normalizedRootDir = rootDir.trim();
+async function withApphostingWorkspaceSlice(source: Directory): Promise<Directory> {
+  const pruned = firebaseNodeBase()
+    .withDirectory(FIREBASE_WORKDIR, source)
+    .withWorkdir(FIREBASE_WORKDIR)
+    .withExec([
+      "bash",
+      "-lc",
+      `
+set -euo pipefail
 
-  if (!normalizedRootDir || normalizedRootDir === ".") {
-    return source;
+node <<'EOF'
+const fs = require('node:fs');
+const rootPath = '${FIREBASE_WORKDIR}';
+const packageJsonPath = \`\${rootPath}/package.json\`;
+const lockfilePath = \`\${rootPath}/package-lock.json\`;
+
+const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+pkg.workspaces = ['src/apps/*'];
+fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\\n');
+
+if (fs.existsSync(lockfilePath)) {
+  const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
+  if (lockfile.packages && typeof lockfile.packages === 'object') {
+    for (const key of Object.keys(lockfile.packages)) {
+      if (key === 'src/services' || key.startsWith('src/services/')) {
+        delete lockfile.packages[key];
+      }
+    }
+
+    const rootPackage = lockfile.packages[''];
+    if (rootPackage && Array.isArray(rootPackage.workspaces)) {
+      rootPackage.workspaces = rootPackage.workspaces.filter(
+        (workspace) => workspace === 'src/apps/*',
+      );
+    }
   }
 
-  return firebaseNodeBase()
-    .withDirectory(FIREBASE_WORKDIR, source)
-    .withFile(
-      `${FIREBASE_WORKDIR}/${normalizedRootDir}/package-lock.json`,
-      lockfileSource.file("package-lock.json"),
-    )
-    .directory(FIREBASE_WORKDIR);
+  fs.writeFileSync(lockfilePath, JSON.stringify(lockfile, null, 2) + '\\n');
+}
+EOF
+`,
+    ]);
+
+  return pruned.directory(FIREBASE_WORKDIR);
 }
 
 function withAppHostingAuth(
@@ -222,7 +248,9 @@ async function prepareFirebaseApphostingSource(
   buildLabel?: string,
   remoteConfigMode?: string,
 ): Promise<Directory> {
-  const installed = await installFirebaseDependencies(source, ["."], {
+  const sourceSlice = await withApphostingWorkspaceSlice(source);
+
+  const installed = await installFirebaseDependencies(sourceSlice, ["."], {
     nodeAuthToken,
     registryScope,
   });
@@ -242,7 +270,7 @@ async function prepareFirebaseApphostingSource(
     remoteConfigMode,
   });
 
-  return withAppRootLockfile(built, rootDir, source);
+  return built;
 }
 
 export async function deployFirebaseApphostingProject(
