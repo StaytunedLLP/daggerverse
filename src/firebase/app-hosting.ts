@@ -1,5 +1,5 @@
 import { Container, Directory, Secret } from "@dagger.io/dagger";
-import { firebaseAppHostingBase } from "./base.js";
+import { firebaseAppHostingBase, firebaseNodeBase } from "./base.js";
 import { buildFirebaseProjects } from "./build.js";
 import type { FirebaseBuildProfile } from "./env.js";
 import {
@@ -10,6 +10,26 @@ import {
 } from "./constants.js";
 import { installFirebaseDependencies } from "./dependencies.js";
 import { shellQuote } from "../shared/path-utils.js";
+
+function withAppRootLockfile(
+  source: Directory,
+  rootDir: string,
+  lockfileSource: Directory,
+): Directory {
+  const normalizedRootDir = rootDir.trim();
+
+  if (!normalizedRootDir || normalizedRootDir === ".") {
+    return source;
+  }
+
+  return firebaseNodeBase()
+    .withDirectory(FIREBASE_WORKDIR, source)
+    .withFile(
+      `${FIREBASE_WORKDIR}/${normalizedRootDir}/package-lock.json`,
+      lockfileSource.file("package-lock.json"),
+    )
+    .directory(FIREBASE_WORKDIR);
+}
 
 function withAppHostingAuth(
   container: Container,
@@ -207,7 +227,7 @@ async function prepareFirebaseApphostingSource(
     registryScope,
   });
 
-  return buildFirebaseProjects(installed, [rootDir], {
+  const built = await buildFirebaseProjects(installed, [rootDir], {
     buildProfile,
     frontendDir: rootDir,
     projectId,
@@ -221,6 +241,8 @@ async function prepareFirebaseApphostingSource(
     buildLabel,
     remoteConfigMode,
   });
+
+  return withAppRootLockfile(built, rootDir, source);
 }
 
 export async function deployFirebaseApphostingProject(
