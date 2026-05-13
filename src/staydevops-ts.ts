@@ -14,6 +14,7 @@ import {
   deployFirebaseApphostingProject,
   deployFirebaseApphostingPipeline,
 } from "./firebase/app-hosting.js";
+import type { FirebaseBuildProfile } from "./firebase/env.js";
 import { firebaseAppHostingBase } from "./firebase/base.js";
 import { runNodeChecks } from "./checks/node-checks.js";
 import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
@@ -345,9 +346,10 @@ export class StaydevopsTs {
    *
    * This function automates the creation, deployment, and deletion of App Hosting
    * backends, supporting both Personal Access Tokens and Workload Identity Federation (WIF).
-   * When `buildBeforeDeploy` is enabled for deploys, it also prepares the source
-   * for Vite by writing `.env.production` from the Firebase web app config and
-   * running the package build before Firebase deploys the backend.
+   * When `buildBeforeDeploy` is enabled for deploys, it prepares the source
+   * for the selected frontend profile by writing env files from the Firebase
+   * web app config and running the package build before Firebase deploys the
+   * backend.
    *
    * @param action - The backend lifecycle action: 'deploy' or 'delete'.
    * @param projectId - The unique identifier of your Firebase/GCP project.
@@ -362,11 +364,12 @@ export class StaydevopsTs {
    * @param extraEnv - Optional secret containing extra environment variables for the frontend build.
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    * @param registryScope - The GitHub Packages organization scope (e.g. 'staytunedllp').
+   * @param buildProfile - Frontend build profile for env file generation. Use 'staystack' for Staystack apps.
    * @param wifProvider - Full resource name of the WIF provider (deploy only).
    * @param wifServiceAccount - Email of the service account to impersonate via WIF (deploy only).
    * @param wifOidcToken - OIDC token secret required for WIF authentication in CI environments.
    * @param wifAudience - Optional specific audience for the WIF OIDC token.
-   * @param buildBeforeDeploy - When true, installs dependencies, writes Vite env files, and runs the package build before deploy.
+   * @param buildBeforeDeploy - When true, installs dependencies, writes env files, and runs the package build before deploy.
    *
    * @example
    * dagger call fb-apphosting --action deploy --source . --project-id "my-project" --backend-id "web-app"
@@ -386,6 +389,7 @@ export class StaydevopsTs {
     extraEnv?: Secret,
     nodeAuthToken?: Secret,
     registryScope?: string,
+    buildProfile: FirebaseBuildProfile = "vite",
     wifProvider = "",
     wifServiceAccount = "",
     wifOidcToken?: Secret,
@@ -409,6 +413,7 @@ export class StaydevopsTs {
           extraEnv,
           nodeAuthToken,
           registryScope,
+          buildProfile,
           wifProvider,
           wifServiceAccount,
           wifOidcToken,

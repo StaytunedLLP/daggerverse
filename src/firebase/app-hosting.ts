@@ -1,6 +1,7 @@
 import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { firebaseAppHostingBase } from "./base.js";
 import { buildFirebaseProjects } from "./build.js";
+import type { FirebaseBuildProfile } from "./env.js";
 import {
   FIREBASE_WIF_CREDENTIALS_PATH,
   FIREBASE_WIF_OIDC_TOKEN_PATH,
@@ -63,19 +64,6 @@ function withAppHostingAuth(
 
   throw new Error(
     "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided.",
-  );
-}
-
-function appHostingConfig(backendId: string, rootDir: string): string {
-  return JSON.stringify(
-    {
-      apphosting: {
-        backendId,
-        rootDir,
-      },
-    },
-    null,
-    2,
   );
 }
 
@@ -158,6 +146,45 @@ fi
 `,
   ];
 }
+
+function writeFirebaseApphostingConfigCommand(
+  backendId: string,
+  rootDir: string,
+): string[] {
+  return [
+    "bash",
+    "-lc",
+    `
+set -euo pipefail
+
+node <<'EOF'
+const fs = require('node:fs');
+const path = '${FIREBASE_WORKDIR}/firebase.json';
+const backendId = ${JSON.stringify(backendId)};
+const rootDir = ${JSON.stringify(rootDir)};
+
+const current = fs.existsSync(path)
+  ? JSON.parse(fs.readFileSync(path, 'utf8'))
+  : {};
+const apphosting = Array.isArray(current.apphosting) ? current.apphosting : [];
+const nextEntry = { backendId, rootDir };
+const index = apphosting.findIndex(
+  (entry) => entry && entry.backendId === backendId,
+);
+
+if (index >= 0) {
+  apphosting[index] = nextEntry;
+} else {
+  apphosting.push(nextEntry);
+}
+
+current.apphosting = apphosting;
+fs.writeFileSync(path, JSON.stringify(current, null, 2) + '\\n');
+EOF
+`,
+  ];
+}
+
 async function prepareFirebaseApphostingSource(
   source: Directory,
   rootDir: string,
@@ -167,22 +194,32 @@ async function prepareFirebaseApphostingSource(
   extraEnv?: Secret,
   nodeAuthToken?: Secret,
   registryScope?: string,
+  buildProfile: FirebaseBuildProfile = "staystack",
+  functionsRegion?: string,
+  functionsBaseUrl?: string,
+  accessActor?: string,
+  accessVia?: string,
+  buildLabel?: string,
+  remoteConfigMode?: string,
 ): Promise<Directory> {
-  const directories = [rootDir].filter(
-    (entry) => typeof entry === "string" && entry.trim().length > 0,
-  );
-
-  const installed = await installFirebaseDependencies(source, directories, {
+  const installed = await installFirebaseDependencies(source, ["."], {
     nodeAuthToken,
     registryScope,
   });
 
-  return buildFirebaseProjects(installed, directories, {
+  return buildFirebaseProjects(installed, [rootDir], {
+    buildProfile,
     frontendDir: rootDir,
     projectId,
     appId,
     webappConfig,
     extraEnv,
+    functionsRegion,
+    functionsBaseUrl,
+    accessActor,
+    accessVia,
+    buildLabel,
+    remoteConfigMode,
   });
 }
 
@@ -202,10 +239,7 @@ export async function deployFirebaseApphostingProject(
   const prepared = firebaseAppHostingBase()
     .withDirectory(FIREBASE_WORKDIR, source)
     .withWorkdir(FIREBASE_WORKDIR)
-    .withNewFile(
-      `${FIREBASE_WORKDIR}/firebase.json`,
-      `${appHostingConfig(backendId, rootDir)}\n`,
-    );
+    .withExec(writeFirebaseApphostingConfigCommand(backendId, rootDir));
 
   const authenticated = withAppHostingAuth(
     prepared,
@@ -284,6 +318,7 @@ export async function deployFirebaseApphostingPipeline(
   extraEnv?: Secret,
   nodeAuthToken?: Secret,
   registryScope?: string,
+  buildProfile: FirebaseBuildProfile = "staystack",
   wifProvider = "",
   wifServiceAccount = "",
   wifOidcToken?: Secret,
@@ -298,6 +333,13 @@ export async function deployFirebaseApphostingPipeline(
     extraEnv,
     nodeAuthToken,
     registryScope,
+    buildProfile,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
   );
 
   return deployFirebaseApphostingProject(
