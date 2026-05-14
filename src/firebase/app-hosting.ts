@@ -1,6 +1,8 @@
 import { Container, Directory, Secret } from "@dagger.io/dagger";
-import { firebaseAppHostingBase } from "./base.js";
+import { firebaseAppHostingBase, firebaseNodeBase } from "./base.js";
 import { buildFirebaseProjects } from "./build.js";
+import type { FirebaseBuildProfile } from "./env.js";
+import { DEFAULT_REGISTRY_SCOPE } from "../shared/constants.js";
 import {
   FIREBASE_WIF_CREDENTIALS_PATH,
   FIREBASE_WIF_OIDC_TOKEN_PATH,
@@ -9,6 +11,81 @@ import {
 } from "./constants.js";
 import { installFirebaseDependencies } from "./dependencies.js";
 import { shellQuote } from "../shared/path-utils.js";
+
+const APPHOSTING_NPM_SECRET_NAME = "github-packages-read-token";
+
+async function withApphostingWorkspaceSlice(
+  source: Directory,
+  nodeAuthToken?: Secret,
+  registryScope = DEFAULT_REGISTRY_SCOPE,
+): Promise<Directory> {
+  let pruned = firebaseNodeBase()
+    .withDirectory(FIREBASE_WORKDIR, source)
+    .withWorkdir(FIREBASE_WORKDIR)
+    .withExec([
+      "bash",
+      "-lc",
+      `
+set -euo pipefail
+
+node <<'EOF'
+const fs = require('node:fs');
+const rootPath = '${FIREBASE_WORKDIR}';
+const packageJsonPath = \`\${rootPath}/package.json\`;
+const lockfilePath = \`\${rootPath}/package-lock.json\`;
+
+const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+pkg.workspaces = ['src/apps/*'];
+fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\\n');
+
+if (fs.existsSync(lockfilePath)) {
+  const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
+  if (lockfile.packages && typeof lockfile.packages === 'object') {
+    for (const key of Object.keys(lockfile.packages)) {
+      if (
+        key === 'src/services' ||
+        key.startsWith('src/services/') ||
+        key === 'node_modules/@staytunedllp/services' ||
+        key.startsWith('node_modules/@staytunedllp/service-') ||
+        key === 'node_modules/@staytunedllp/staytest-ts'
+      ) {
+        delete lockfile.packages[key];
+      }
+    }
+
+    const rootPackage = lockfile.packages[''];
+    if (rootPackage && Array.isArray(rootPackage.workspaces)) {
+      rootPackage.workspaces = rootPackage.workspaces.filter(
+        (workspace) => workspace === 'src/apps/*',
+      );
+    }
+  }
+
+  fs.writeFileSync(lockfilePath, JSON.stringify(lockfile, null, 2) + '\\n');
+}
+EOF
+`,
+    ]);
+
+  if (nodeAuthToken) {
+    pruned = pruned
+      .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
+      .withExec([
+        "bash",
+        "-lc",
+        `
+set -euo pipefail
+
+cat > .npmrc <<EOF
+@${registryScope}:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${'${'}NODE_AUTH_TOKEN}
+EOF
+`,
+      ]);
+  }
+
+  return pruned.directory(FIREBASE_WORKDIR);
+}
 
 function withAppHostingAuth(
   container: Container,
@@ -63,19 +140,6 @@ function withAppHostingAuth(
 
   throw new Error(
     "Either gcpCredentials or (wifProvider, wifServiceAccount, wifOidcToken) must be provided.",
-  );
-}
-
-function appHostingConfig(backendId: string, rootDir: string): string {
-  return JSON.stringify(
-    {
-      apphosting: {
-        backendId,
-        rootDir,
-      },
-    },
-    null,
-    2,
   );
 }
 
@@ -158,6 +222,25 @@ fi
 `,
   ];
 }
+
+function grantAppHostingSecretAccessCommand(
+  projectId: string,
+  backendId: string,
+  region: string,
+): string[] {
+  return [
+    "bash",
+    "-c",
+    `
+set -euo pipefail
+
+firebase apphosting:secrets:grantaccess ${shellQuote(APPHOSTING_NPM_SECRET_NAME)} \
+  --project ${shellQuote(projectId)} \
+  --location ${shellQuote(region)} \
+  --backend ${shellQuote(backendId)}
+`,
+  ];
+}
 async function prepareFirebaseApphostingSource(
   source: Directory,
   rootDir: string,
@@ -186,6 +269,90 @@ async function prepareFirebaseApphostingSource(
   });
 }
 
+function writeFirebaseApphostingConfigCommand(
+  backendId: string,
+  rootDir: string,
+): string[] {
+  return [
+    "bash",
+    "-lc",
+    `
+set -euo pipefail
+
+node <<'EOF'
+const fs = require('node:fs');
+const path = '${FIREBASE_WORKDIR}/firebase.json';
+const backendId = ${JSON.stringify(backendId)};
+const rootDir = ${JSON.stringify(rootDir)};
+
+const current = fs.existsSync(path)
+  ? JSON.parse(fs.readFileSync(path, 'utf8'))
+  : {};
+const apphosting = Array.isArray(current.apphosting) ? current.apphosting : [];
+const nextEntry = { backendId, rootDir };
+const index = apphosting.findIndex(
+  (entry) => entry && entry.backendId === backendId,
+);
+
+if (index >= 0) {
+  apphosting[index] = nextEntry;
+} else {
+  apphosting.push(nextEntry);
+}
+
+current.apphosting = apphosting;
+fs.writeFileSync(path, JSON.stringify(current, null, 2) + '\\n');
+EOF
+`,
+  ];
+}
+
+async function prepareFirebaseApphostingSource(
+  source: Directory,
+  rootDir: string,
+  projectId: string,
+  appId?: string,
+  webappConfig?: Secret,
+  extraEnv?: Secret,
+  nodeAuthToken?: Secret,
+  registryScope?: string,
+  buildProfile: FirebaseBuildProfile = "staystack",
+  functionsRegion?: string,
+  functionsBaseUrl?: string,
+  accessActor?: string,
+  accessVia?: string,
+  buildLabel?: string,
+  remoteConfigMode?: string,
+): Promise<Directory> {
+  const sourceSlice = await withApphostingWorkspaceSlice(
+    source,
+    nodeAuthToken,
+    registryScope,
+  );
+
+  const installed = await installFirebaseDependencies(sourceSlice, ["."], {
+    nodeAuthToken,
+    registryScope,
+  });
+
+  const built = await buildFirebaseProjects(installed, [rootDir], {
+    buildProfile,
+    frontendDir: rootDir,
+    projectId,
+    appId,
+    webappConfig,
+    extraEnv,
+    functionsRegion,
+    functionsBaseUrl,
+    accessActor,
+    accessVia,
+    buildLabel,
+    remoteConfigMode,
+  });
+
+  return built;
+}
+
 export async function deployFirebaseApphostingProject(
   source: Directory,
   projectId: string,
@@ -202,10 +369,7 @@ export async function deployFirebaseApphostingProject(
   const prepared = firebaseAppHostingBase()
     .withDirectory(FIREBASE_WORKDIR, source)
     .withWorkdir(FIREBASE_WORKDIR)
-    .withNewFile(
-      `${FIREBASE_WORKDIR}/firebase.json`,
-      `${appHostingConfig(backendId, rootDir)}\n`,
-    );
+    .withExec(writeFirebaseApphostingConfigCommand(backendId, rootDir));
 
   const authenticated = withAppHostingAuth(
     prepared,
@@ -214,7 +378,11 @@ export async function deployFirebaseApphostingProject(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
-  ).withExec(backendExistsCommand(projectId, backendId, appId, region, rootDir));
+  )
+    .withExec(backendExistsCommand(projectId, backendId, appId, region, rootDir))
+    .withExec(
+      grantAppHostingSecretAccessCommand(projectId, backendId, region),
+    );
 
   const deployed = authenticated.withExec([
     "bash",
@@ -284,6 +452,7 @@ export async function deployFirebaseApphostingPipeline(
   extraEnv?: Secret,
   nodeAuthToken?: Secret,
   registryScope?: string,
+  buildProfile: FirebaseBuildProfile = "staystack",
   wifProvider = "",
   wifServiceAccount = "",
   wifOidcToken?: Secret,
@@ -298,6 +467,13 @@ export async function deployFirebaseApphostingPipeline(
     extraEnv,
     nodeAuthToken,
     registryScope,
+    buildProfile,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
   );
 
   return deployFirebaseApphostingProject(

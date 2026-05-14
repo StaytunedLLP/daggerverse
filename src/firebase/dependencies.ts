@@ -15,7 +15,7 @@ export async function installFirebaseDependencies(
   directories: string[],
   options: FirebaseInstallOptions = {},
 ): Promise<Directory> {
-  let container = firebaseNodeBase();
+  let container = firebaseNodeBase().withDirectory(FIREBASE_WORKDIR, source);
   const resolvedNodeAuthToken = maybeResolveNodeAuthToken(options.nodeAuthToken);
 
   if (resolvedNodeAuthToken) {
