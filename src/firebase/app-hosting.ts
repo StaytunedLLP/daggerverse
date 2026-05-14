@@ -241,6 +241,33 @@ firebase apphosting:secrets:grantaccess ${shellQuote(APPHOSTING_NPM_SECRET_NAME)
 `,
   ];
 }
+async function prepareFirebaseApphostingSource(
+  source: Directory,
+  rootDir: string,
+  projectId: string,
+  appId?: string,
+  webappConfig?: Secret,
+  extraEnv?: Secret,
+  nodeAuthToken?: Secret,
+  registryScope?: string,
+): Promise<Directory> {
+  const directories = [rootDir].filter(
+    (entry) => typeof entry === "string" && entry.trim().length > 0,
+  );
+
+  const installed = await installFirebaseDependencies(source, directories, {
+    nodeAuthToken,
+    registryScope,
+  });
+
+  return buildFirebaseProjects(installed, directories, {
+    frontendDir: rootDir,
+    projectId,
+    appId,
+    webappConfig,
+    extraEnv,
+  });
+}
 
 function writeFirebaseApphostingConfigCommand(
   backendId: string,
