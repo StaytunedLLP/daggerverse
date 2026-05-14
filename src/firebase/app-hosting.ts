@@ -12,6 +12,8 @@ import {
 import { installFirebaseDependencies } from "./dependencies.js";
 import { shellQuote } from "../shared/path-utils.js";
 
+const APPHOSTING_NPM_SECRET_NAME = "github-packages-read-token";
+
 async function withApphostingWorkspaceSlice(
   source: Directory,
   nodeAuthToken?: Secret,
@@ -221,6 +223,25 @@ fi
   ];
 }
 
+function grantAppHostingSecretAccessCommand(
+  projectId: string,
+  backendId: string,
+  region: string,
+): string[] {
+  return [
+    "bash",
+    "-c",
+    `
+set -euo pipefail
+
+firebase apphosting:secrets:grantaccess ${shellQuote(APPHOSTING_NPM_SECRET_NAME)} \
+  --project ${shellQuote(projectId)} \
+  --location ${shellQuote(region)} \
+  --backend ${shellQuote(backendId)}
+`,
+  ];
+}
+
 function writeFirebaseApphostingConfigCommand(
   backendId: string,
   rootDir: string,
@@ -330,7 +351,11 @@ export async function deployFirebaseApphostingProject(
     wifServiceAccount,
     wifOidcToken,
     wifAudience,
-  ).withExec(backendExistsCommand(projectId, backendId, appId, region, rootDir));
+  )
+    .withExec(backendExistsCommand(projectId, backendId, appId, region, rootDir))
+    .withExec(
+      grantAppHostingSecretAccessCommand(projectId, backendId, region),
+    );
 
   const deployed = authenticated.withExec([
     "bash",
