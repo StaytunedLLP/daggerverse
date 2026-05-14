@@ -9,6 +9,7 @@ export type FirebaseEnvOptions = {
   appId?: string;
   webappConfig?: Secret;
   extraEnv?: Secret;
+  envFileName?: string;
 };
 
 export function withFrontendEnv(
@@ -20,12 +21,16 @@ export function withFrontendEnv(
   }
 
   const frontendWorkdir = `${FIREBASE_WORKDIR}/${options.frontendDir}`;
+  const envFileName = options.envFileName?.trim() || ".env";
   let configured = container
     .withWorkdir(frontendWorkdir)
     .withEnvVariable("VITE_FIREBASE_PROJECT_ID", options.projectId);
 
   if (options.appId) {
-    configured = configured.withEnvVariable("VITE_FIREBASE_APP_ID", options.appId);
+    configured = configured.withEnvVariable(
+      "VITE_FIREBASE_APP_ID",
+      options.appId,
+    );
   }
 
   if (options.webappConfig) {
@@ -36,7 +41,10 @@ export function withFrontendEnv(
   }
 
   if (options.extraEnv) {
-    configured = configured.withSecretVariable("EXTRA_ENV_SECRET", options.extraEnv);
+    configured = configured.withSecretVariable(
+      "EXTRA_ENV_SECRET",
+      options.extraEnv,
+    );
   }
 
   return configured.withExec([
@@ -44,7 +52,7 @@ export function withFrontendEnv(
     "-lc",
     [
       STRICT_SHELL_HEADER,
-      "node <<'EOF'",
+      `ENV_FILE_NAME=${shellQuote(envFileName)} node <<'EOF'`,
       "const fs = require('node:fs');",
       "",
       "function formatEnvValue(value) {",
@@ -68,7 +76,7 @@ export function withFrontendEnv(
       "  }",
       "}",
       "",
-      "const envPath = '.env';",
+      "const envPath = process.env.ENV_FILE_NAME || '.env';",
       "const existingEnvContent = fs.existsSync(envPath)",
       "  ? fs.readFileSync(envPath, 'utf8')",
       "  : '';",
@@ -115,6 +123,10 @@ export function withFrontendEnv(
       "const finalEnvContent = filtered.length > 0 ? `${filtered.join('\\n')}\\n` : '';",
       "fs.writeFileSync(envPath, finalEnvContent);",
       "EOF",
-    ].map((line) => (line.startsWith("node <<'EOF'") || line === "EOF" ? line : line)).join("\n"),
+    ]
+      .map((line) =>
+        line.startsWith("node <<'EOF'") || line === "EOF" ? line : line,
+      )
+      .join("\n"),
   ]);
 }

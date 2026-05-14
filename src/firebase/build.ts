@@ -25,6 +25,7 @@ export async function buildFirebaseProjects(
       appId: options.appId,
       webappConfig: options.webappConfig,
       extraEnv: options.extraEnv,
+      envFileName: ".env.production",
     });
   }
 
