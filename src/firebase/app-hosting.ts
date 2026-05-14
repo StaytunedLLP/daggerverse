@@ -2,6 +2,7 @@ import { Container, Directory, Secret } from "@dagger.io/dagger";
 import { firebaseAppHostingBase, firebaseNodeBase } from "./base.js";
 import { buildFirebaseProjects } from "./build.js";
 import type { FirebaseBuildProfile } from "./env.js";
+import { DEFAULT_REGISTRY_SCOPE } from "../shared/constants.js";
 import {
   FIREBASE_WIF_CREDENTIALS_PATH,
   FIREBASE_WIF_OIDC_TOKEN_PATH,
@@ -11,8 +12,12 @@ import {
 import { installFirebaseDependencies } from "./dependencies.js";
 import { shellQuote } from "../shared/path-utils.js";
 
-async function withApphostingWorkspaceSlice(source: Directory): Promise<Directory> {
-  const pruned = firebaseNodeBase()
+async function withApphostingWorkspaceSlice(
+  source: Directory,
+  nodeAuthToken?: Secret,
+  registryScope = DEFAULT_REGISTRY_SCOPE,
+): Promise<Directory> {
+  let pruned = firebaseNodeBase()
     .withDirectory(FIREBASE_WORKDIR, source)
     .withWorkdir(FIREBASE_WORKDIR)
     .withExec([
@@ -59,6 +64,23 @@ if (fs.existsSync(lockfilePath)) {
 EOF
 `,
     ]);
+
+  if (nodeAuthToken) {
+    pruned = pruned
+      .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
+      .withExec([
+        "bash",
+        "-lc",
+        `
+set -euo pipefail
+
+cat > .npmrc <<EOF
+@${registryScope}:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${'${'}NODE_AUTH_TOKEN}
+EOF
+`,
+      ]);
+  }
 
   return pruned.directory(FIREBASE_WORKDIR);
 }
@@ -254,7 +276,11 @@ async function prepareFirebaseApphostingSource(
   buildLabel?: string,
   remoteConfigMode?: string,
 ): Promise<Directory> {
-  const sourceSlice = await withApphostingWorkspaceSlice(source);
+  const sourceSlice = await withApphostingWorkspaceSlice(
+    source,
+    nodeAuthToken,
+    registryScope,
+  );
 
   const installed = await installFirebaseDependencies(sourceSlice, ["."], {
     nodeAuthToken,
