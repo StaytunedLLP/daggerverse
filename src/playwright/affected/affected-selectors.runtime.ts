@@ -248,6 +248,9 @@ function isSourceFile(file: string): boolean {
   return !(file.includes("/docs/") || file.startsWith("docs/"));
 }
 
+const isTsconfigProjectFile = (file: string): boolean =>
+  /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/u.test(file);
+
 function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): WorkspaceDir[] {
   const changed = new Set<WorkspaceDir>();
 
@@ -295,7 +298,7 @@ function affectedPackages(
         !file.startsWith("dagger/") &&
         (file.includes("tools/scripts/") ||
           file.endsWith("package.json") ||
-          file.endsWith("tsconfig.json") ||
+          isTsconfigProjectFile(file) ||
           file.endsWith("yarn.lock") ||
           file.endsWith("package-lock.json") ||
           file.endsWith("playwright.config.ts")),
