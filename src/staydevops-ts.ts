@@ -3,6 +3,7 @@ import {
   Directory,
   File,
   Secret,
+  Workspace,
   argument,
   check,
   func,
@@ -37,12 +38,20 @@ type CheckMode = "format" | "lint" | "build" | "test";
  */
 @object()
 export class Checks {
+  private source: Directory;
+  private nodeAuthToken?: Secret;
+
+  constructor(ws: Workspace, nodeAuthToken?: Secret) {
+    this.source = ws.directory("/", {
+      exclude: [".git", "dagger", "dist", "node_modules"],
+    });
+    this.nodeAuthToken = nodeAuthToken;
+  }
+
   private async runDefaultCheck(
-    source: Directory,
     mode: CheckMode,
-    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+    await runNodeChecks(this.source, this.nodeAuthToken, {
       [mode]: true,
     });
   }
@@ -56,28 +65,20 @@ export class Checks {
    * 5. (Optional) Provisioning Playwright browsers and system dependencies.
    * 6. (Optional) Bootstrapping Firebase CLI tooling.
    *
-   * @param source - Repository source directory to install into the workspace container.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
    * @param packagePaths - Relative path (or CSV list of paths) where npm installs should run. Defaults to the source root.
    * @param playwrightInstall - Enable to install Playwright browsers and OS-level system dependencies into the container.
    * @param firebaseTools - Enable to install the Firebase CLI (firebase-tools) into the prepared workspace.
    *
    * @example
-   * dagger call checks install --source . --playwright-install
+   * dagger call checks install --playwright-install
    */
   @func()
   async install(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
     packagePaths = ".",
     playwrightInstall = false,
     firebaseTools = false,
   ): Promise<Directory> {
-    return prepareNodeWorkspace(source, nodeAuthToken, {
+    return prepareNodeWorkspace(this.source, this.nodeAuthToken, {
       packagePaths,
       playwrightInstall,
       firebaseTools,
@@ -87,89 +88,49 @@ export class Checks {
   /**
    * Validates repository formatting using the standard `npm run format:check` command.
    *
-   * @param source - Repository source directory to validate.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
    * @example
-   * dagger call checks format --source .
+   * dagger call checks format
    */
   @check()
   @func()
-  async format(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "format", nodeAuthToken);
+  async format(): Promise<void> {
+    await this.runDefaultCheck("format");
   }
 
   /**
    * Executes the repository linter using the standard `npm run lint` command.
    *
-   * @param source - Repository source directory to lint.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
    * @example
-   * dagger call checks lint --source .
+   * dagger call checks lint
    */
   @check()
   @func()
-  async lint(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "lint", nodeAuthToken);
+  async lint(): Promise<void> {
+    await this.runDefaultCheck("lint");
   }
 
   /**
    * Verifies that the repository builds successfully using the `npm run build` command.
    *
-   * @param source - Repository source directory to build.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
    * @example
-   * dagger call checks build --source .
+   * dagger call checks build
    */
   @check()
   @func()
-  async build(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "build", nodeAuthToken);
+  async build(): Promise<void> {
+    await this.runDefaultCheck("build");
   }
 
   /**
    * Executes the standard repository test suite using the `npm run test` command.
    *
-   * @param source - Repository source directory to test.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
    * @example
-   * dagger call checks test --source .
+   * dagger call checks test
    */
   @check()
   @func()
-  async test(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runDefaultCheck(source, "test", nodeAuthToken);
+  async test(): Promise<void> {
+    await this.runDefaultCheck("test");
   }
 }
 
@@ -192,6 +153,12 @@ export class Checks {
  */
 @object()
 export class StaydevopsTs {
+  private ws: Workspace;
+
+  constructor(ws: Workspace) {
+    this.ws = ws;
+  }
+
   /**
    * Validates the PR title according to Conventional Commits naming convention.
    *
@@ -218,11 +185,11 @@ export class StaydevopsTs {
    * Returns the collection of repository checks.
    *
    * @example
-   * dagger call checks lint --source .
+   * dagger call checks lint
    */
   @func()
-  checks(): Checks {
-    return new Checks();
+  checks(nodeAuthToken?: Secret): Checks {
+    return new Checks(this.ws, nodeAuthToken);
   }
 
   /**
