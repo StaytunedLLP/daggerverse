@@ -15,6 +15,19 @@ function createGitContainer(source: Directory): Container {
 }
 
 /**
+ * Parses git output into an array of file paths.
+ *
+ * @param output - The raw stdout from a git command.
+ * @returns An array of trimmed, non-empty file paths.
+ */
+function parseGitFilesOutput(output: string): string[] {
+  return output
+    .split("\n")
+    .map((file: string) => file.trim())
+    .filter(Boolean);
+}
+
+/**
  * Retrieves an array of files that are staged for commit.
  *
  * @param source - The source directory to check for staged files.
@@ -42,12 +55,7 @@ export async function gitDiffStaged(
     .stdout();
 
   // Split the output into an array of files, removing any empty entries
-  const files = changedFilesOutput
-    .split("\n")
-    .map((file: string) => file.trim())
-    .filter(Boolean);
-
-  return files;
+  return parseGitFilesOutput(changedFilesOutput);
 }
 
 /**
@@ -85,12 +93,7 @@ export async function gitDiffPrevious(
     .stdout();
 
   // Split the output into an array of files, removing any empty entries
-  const files = lastCommitFilesOutput
-    .split("\n")
-    .map((file: string) => file.trim())
-    .filter(Boolean);
-
-  return files;
+  return parseGitFilesOutput(lastCommitFilesOutput);
 }
 
 /**
@@ -123,10 +126,5 @@ export async function gitDiffBetweenCommits(
     .stdout();
 
   // Split the output into an array of files, removing any empty entries
-  const files = filesOutput
-    .split("\n")
-    .map((file: string) => file.trim())
-    .filter(Boolean);
-
-  return files;
+  return parseGitFilesOutput(filesOutput);
 }
