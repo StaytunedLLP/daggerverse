@@ -250,17 +250,21 @@ function isSourceFile(file: string): boolean {
 
 function changedPackages(files: string[], workspaceDirs: WorkspaceDir[]): WorkspaceDir[] {
   const changed = new Set<WorkspaceDir>();
+  const dirSet = new Set(workspaceDirs);
 
   for (const file of files) {
     if (!isSourceFile(file)) {
       continue;
     }
 
-    for (const directory of workspaceDirs) {
-      if (file.startsWith(`${directory}/`)) {
-        changed.add(directory);
+    let slashIndex = file.lastIndexOf("/");
+    while (slashIndex > 0) {
+      const prefix = file.substring(0, slashIndex);
+      if (dirSet.has(prefix)) {
+        changed.add(prefix);
         break;
       }
+      slashIndex = file.lastIndexOf("/", slashIndex - 1);
     }
   }
 
