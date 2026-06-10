@@ -190,12 +190,14 @@ export async function readBaseBranchPackageJson(
     .container()
     .from("alpine/git:latest")
     .withSecretVariable("GITHUB_TOKEN", githubToken)
+    .withEnvVariable("REPO_OWNER", repoOwner)
+    .withEnvVariable("REPO_NAME", repoName)
     .withExec([
       "sh",
       "-c",
       [
         "set -eu",
-        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${repoOwner}/${repoName}.git"`,
+        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${"${REPO_OWNER}"}/${"${REPO_NAME}"}.git"`,
         `git clone --branch ${shellQuote(branch)} --single-branch --no-checkout --depth=1 "$repo_url" ${shellQuote(repoRoot)}`,
         `cd ${shellQuote(repoRoot)}`,
         `git show HEAD:${shellQuote(filePath)} > /tmp/package.json`,
