@@ -45,6 +45,16 @@ export function validatePrTitle(title: string): void {
   }
 }
 
+interface GitHubEvent {
+  pull_request?: {
+    title?: string;
+    number?: number;
+  };
+  repository?: {
+    full_name?: string;
+  };
+}
+
 /**
  * Reads the PR title from the GitHub event file and validates it.
  * This is intended to be used in GitHub Actions.
@@ -77,9 +87,9 @@ export async function checkPrTitleFromEvent(
     }
   }
 
-  let event: any;
+  let event: GitHubEvent;
   try {
-    event = JSON.parse(content);
+    event = JSON.parse(content) as GitHubEvent;
   } catch (error: unknown) {
     throw new Error(
       `Failed to parse GitHub event file: ${
