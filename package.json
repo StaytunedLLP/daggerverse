@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "publishConfig": {
