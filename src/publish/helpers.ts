@@ -195,7 +195,9 @@ export async function readBaseBranchPackageJson(
       "-c",
       [
         "set -eu",
-        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/${repoOwner}/${repoName}.git"`,
+        `repo_owner=${shellQuote(repoOwner)}`,
+        `repo_name=${shellQuote(repoName)}`,
+        `repo_url="https://x-access-token:${"${GITHUB_TOKEN}"}@github.com/$repo_owner/$repo_name.git"`,
         `git clone --branch ${shellQuote(branch)} --single-branch --no-checkout --depth=1 "$repo_url" ${shellQuote(repoRoot)}`,
         `cd ${shellQuote(repoRoot)}`,
         `git show HEAD:${shellQuote(filePath)} > /tmp/package.json`,
