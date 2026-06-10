@@ -155,16 +155,19 @@ async function syncPrVersion(
 ): Promise<SyncPrVersionResult> {
   const baseBranch = options.baseBranch ?? "main";
   const packagePath = options.packagePath ?? ".";
-  const mainManifest = await readBaseBranchPackageJson(
-    options.githubToken,
-    options.repoOwner,
-    options.repoName,
-    baseBranch,
-    packagePath,
-  );
-  const manifest = await readPackageJsonAtPath(options.source, packagePath);
 
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  const [mainManifest, manifest] = await Promise.all([
+    readBaseBranchPackageJson(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      baseBranch,
+      packagePath,
+    ),
+    readPackageJsonAtPath(options.source, packagePath),
+    ensureFileExistsAtPath(options.source, packagePath, "package-lock.json")
+  ]);
+
   parseExactVersion(mainManifest.version);
   parseExactVersion(manifest.version);
 
@@ -224,13 +227,17 @@ async function publishRelease(
   options: ReleasePackageOptions,
 ): Promise<PublishPackageResult> {
   const packagePath = options.packagePath ?? ".";
-  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+
+  const [manifest] = await Promise.all([
+    readPackageJsonAtPath(options.source, packagePath),
+    ensureFileExistsAtPath(options.source, packagePath, "package-lock.json")
+  ]);
+
   const registryScope = resolveRegistryScope(
     manifest.name,
     options.registryScope,
   );
 
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
   parseExactVersion(manifest.version);
 
   if (
