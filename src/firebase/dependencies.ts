@@ -26,11 +26,19 @@ export async function installFirebaseDependencies(
     });
   }
 
-  for (const dir of directories.filter((entry) => entry.trim().length > 0)) {
-    const path = dir.trim();
-    const dirRef = source.directory(path);
-    const entries = await dirRef.entries();
+  const validPaths = directories
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 
+  const dirData = await Promise.all(
+    validPaths.map(async (path) => {
+      const dirRef = source.directory(path);
+      const entries = await dirRef.entries();
+      return { path, dirRef, entries };
+    })
+  );
+
+  for (const { path, dirRef, entries } of dirData) {
     if (!entries.includes("package.json")) {
       container = container.withDirectory(`${FIREBASE_WORKDIR}/${path}`, dirRef);
       continue;
