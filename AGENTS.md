@@ -21,25 +21,22 @@ Treat this section as the highest-priority implementation policy for this reposi
    - Do not hardcode repository-specific paths, scripts, or assumptions.
    - Use defaults that work broadly with override-friendly function parameters.
 
-### Mandatory CI Runner + Bootstrap for Dagger
+### CI Runner for Dagger
 
 Any GitHub Actions job that invokes Dagger must:
 
-1. set `runs-on: st-arc`
-2. bootstrap the Dagger engine on ARC before any Dagger call
+1. set `runs-on: shr`
+2. run Dagger CLI commands directly using standard shell execution:
 
 ```yaml
 jobs:
   job_name:
-    runs-on: st-arc
+    runs-on: shr
 
     steps:
-      - name: Bootstrap Dagger (ARC)
-        uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
-        with:
-          namespace: dagger
-          label_selector: name=dagger-engine
-          prefer_same_node: "true"
+      - name: Run Dagger Call
+        run: |
+          dagger call -m . <function_name> --source=.
 ```
 
 ### Dagger Module Authoring Standards (TypeScript)
