@@ -8,6 +8,7 @@ import {
   withFullSource,
 } from "#shared/index.js";
 import { normalizePaths, resolveWorkspacePath, shellQuote } from "#shared/path-utils.js";
+import { buildInternalSelectorProgram } from "./affected-node-tests.js";
 import type { NodeChecksOptions } from "./types.js";
 
 function buildVerifyScript(
@@ -59,7 +60,65 @@ export async function runNodeChecks(
     }
 
     if (options.test) {
-      workspace = runNpmScript(workspace, "test", { cwd: packagePath });
+      let args: string[] = [];
+      let skipTests = false;
+
+      if (options.runAffected) {
+        const program = buildInternalSelectorProgram(
+          options.base ?? "origin/main",
+        );
+        const runContainer = workspace
+          .withEnvVariable("STAYTUNED_AFFECTED_RUNTIME_EXECUTE", "1")
+          .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
+          .withNewFile("/tmp/affected-node-tests.ts", program)
+          .withExec(["node", "--experimental-strip-types", "/tmp/affected-node-tests.ts"]);
+        
+        const affectedTestsStr = (await runContainer.stdout()).trim();
+        if (affectedTestsStr.length === 0) {
+          skipTests = true;
+        } else {
+          args = affectedTestsStr.split(/\s+/).filter((val) => val.length > 0);
+        }
+      }
+
+      if (!skipTests) {
+        let testWorkspace = workspace;
+        const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
+
+        testWorkspace = testWorkspace.withExec(["bash", "-lc", [
+          STRICT_SHELL_HEADER,
+          `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+          `if ${buildCheck} 2>/dev/null; then`,
+          `  npm run build`,
+          `fi`,
+        ].join("\n")]);
+
+        if (args.length > 0) {
+          const runScript = [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `TEST_SCRIPT=$(node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              let script = pkg.scripts.test || 'node --test';
+              script = script.replace(/['\\\"\\\`]?src\\\\/\\\\*\\\\*\\\\/[^'\\\"\\\`\\\\s]+['\\\"\\\`]?/g, process.env.STAYTUNED_AFFECTED_TEST_FILES);
+              console.log(script);
+            ")`,
+            `eval "$TEST_SCRIPT"`,
+          ].join("\n");
+
+          workspace = testWorkspace
+            .withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES", args.map(a => `'${a}'`).join(" "))
+            .withExec(["bash", "-lc", runScript]);
+        } else {
+          workspace = runNpmScript(testWorkspace, "test", {
+            cwd: packagePath,
+            args,
+          });
+        }
+      } else {
+        workspace = workspace.withExec(["echo", "No affected tests found to run."]);
+      }
     }
 
     if (options.build) {
