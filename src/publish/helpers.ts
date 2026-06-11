@@ -1,8 +1,8 @@
 import path from "node:path";
 import { Directory, Secret, dag } from "@dagger.io/dagger";
 import { PackageManifest, VersionParts } from "./types.js";
-import { STRICT_SHELL_HEADER } from "../shared/constants.js";
-import { shellQuote } from "../shared/path-utils.js";
+import { STRICT_SHELL_HEADER } from "#shared/constants.js";
+import { shellQuote } from "#shared/path-utils.js";
 
 const EXACT_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const REGISTRY_SCOPE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;

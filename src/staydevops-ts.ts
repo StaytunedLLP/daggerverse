@@ -8,23 +8,23 @@ import {
   func,
   object,
 } from "@dagger.io/dagger";
-import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
+import { checkPrTitleFromEvent } from "#checks/pr-checks.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
   deployFirebaseApphostingPipeline,
-} from "./firebase/app-hosting.js";
-import { firebaseAppHostingBase } from "./firebase/base.js";
-import { runNodeChecks } from "./checks/node-checks.js";
-import { prepareNodeWorkspace } from "./copilot/prepare-node-workspace.js";
-import { firebaseDeployWebhostingPipeline } from "./firebase/pipeline.js";
+} from "#firebase/app-hosting.js";
+import { firebaseAppHostingBase } from "#firebase/base.js";
+import { runNodeChecks } from "#checks/node-checks.js";
+import { prepareNodeWorkspace } from "#copilot/prepare-node-workspace.js";
+import { firebaseDeployWebhostingPipeline } from "#firebase/pipeline.js";
 import {
   gitDiffBetweenCommits,
   gitDiffPrevious,
   gitDiffStaged,
-} from "./git/index.js";
-import { releasePackage } from "./publish/index.js";
-import { runPlaywrightTests } from "./playwright/index.js";
+} from "#git/index.js";
+import { releasePackage } from "#publish/index.js";
+import { runPlaywrightTests } from "#playwright/index.js";
 
 type CheckMode = "format" | "lint" | "build" | "test";
 

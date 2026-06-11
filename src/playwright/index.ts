@@ -7,8 +7,8 @@ import {
   withFullSource,
   withPlaywrightBrowsers,
   withPlaywrightSystemDeps,
-} from "../shared/index.js";
-import { normalizePaths } from "../shared/path-utils.js";
+} from "#shared/index.js";
+import { normalizePaths } from "#shared/path-utils.js";
 import {
   buildInternalSelectorProgram,
   listTestsSelectorMode,

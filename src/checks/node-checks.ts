@@ -6,8 +6,8 @@ import {
   createNodeWorkspace,
   runNpmScript,
   withFullSource,
-} from "../shared/index.js";
-import { normalizePaths, resolveWorkspacePath, shellQuote } from "../shared/path-utils.js";
+} from "#shared/index.js";
+import { normalizePaths, resolveWorkspacePath, shellQuote } from "#shared/path-utils.js";
 import type { NodeChecksOptions } from "./types.js";
 
 function buildVerifyScript(
