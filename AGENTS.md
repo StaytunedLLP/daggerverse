@@ -61,6 +61,10 @@ jobs:
    - Use `dagger call` in examples that pass arguments (e.g., `--source`).
    - Use `dagger check` only for general check-style execution examples.
 
+6. **Subpath Imports (mandatory)**
+   - Do not use relative path imports targeting outer directories (e.g., `../shared/index.js`).
+   - Always use Node.js Subpath Imports starting with `#` (e.g., `#shared/index.js`, `#firebase/base.js`) for imports crossing directory boundaries inside `src/`. Sibling imports within the same folder can remain relative (e.g., `./base.js`).
+
 ### Caching and Layering Rules (Mandatory)
 
 1. **Lockfile-first dependency layering**
