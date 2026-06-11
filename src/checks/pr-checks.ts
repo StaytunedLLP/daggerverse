@@ -144,7 +144,7 @@ export async function checkPrTitleFromEvent(
  * Replaces the previous implementation that used the `gh` CLI container.
  * This avoids GHCR image pull issues and works reliably in CI environments.
  */
-async function postPrComment(
+export async function postPrComment(
   githubToken: Secret,
   repoFullName: string,
   prNumber: number,
