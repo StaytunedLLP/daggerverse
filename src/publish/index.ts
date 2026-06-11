@@ -21,16 +21,16 @@ import {
   DEFAULT_SOURCE_EXCLUDES,
   DEFAULT_WORKSPACE,
   STRICT_SHELL_HEADER,
-} from "../shared/constants.js";
-import { createBaseNodeContainer, withNpmCache } from "../shared/container.js";
-import { shellQuote } from "../shared/path-utils.js";
+} from "#shared/constants.js";
+import { createBaseNodeContainer, withNpmCache } from "#shared/container.js";
+import { shellQuote } from "#shared/path-utils.js";
 import {
   requirePackageLock,
   withFullSource,
   withInstalledDependencies,
   withLockfilesOnly,
   withNpmAuth,
-} from "../shared/npm.js";
+} from "#shared/npm.js";
 
 const SYNC_WORKSPACE = "/tmp/release-package-sync";
 const GIT_REPO_ROOT = "/tmp/release-package-repo";

@@ -3,7 +3,7 @@ import {
   createBaseNodeContainer,
   withFirebaseCli,
   withNpmCache,
-} from "../shared/index.js";
+} from "#shared/index.js";
 import {
   FIREBASE_APPHOSTING_NPM_CACHE,
   FIREBASE_WORKDIR,

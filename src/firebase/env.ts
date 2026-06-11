@@ -1,6 +1,6 @@
 import { Container, Secret } from "@dagger.io/dagger";
-import { STRICT_SHELL_HEADER } from "../shared/constants.js";
-import { shellQuote } from "../shared/path-utils.js";
+import { STRICT_SHELL_HEADER } from "#shared/constants.js";
+import { shellQuote } from "#shared/path-utils.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
 
 export type FirebaseEnvOptions = {

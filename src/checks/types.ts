@@ -1,4 +1,4 @@
-import type { PathInput } from "../shared/types.js";
+import type { PathInput } from "#shared/types.js";
 
 export type NodeChecksOptions = {
   packagePaths?: PathInput;

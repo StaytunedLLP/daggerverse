@@ -11,6 +11,12 @@
       "import": "./dist/index.js"
     }
   },
+  "imports": {
+    "#*": {
+      "types": "./src/*",
+      "default": "./dist/*"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -28,7 +34,5 @@
   "devDependencies": {
     "typescript": "^5.5.4"
   },
-  "dependencies": {
-    "@dagger.io/dagger": "^0.20.3"
-  }
+  "dependencies": {"typescript":"5.9.3"}
 }

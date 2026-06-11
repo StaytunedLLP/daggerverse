@@ -21,25 +21,22 @@ Treat this section as the highest-priority implementation policy for this reposi
    - Do not hardcode repository-specific paths, scripts, or assumptions.
    - Use defaults that work broadly with override-friendly function parameters.
 
-### Mandatory CI Runner + Bootstrap for Dagger
+### CI Runner for Dagger
 
 Any GitHub Actions job that invokes Dagger must:
 
-1. set `runs-on: st-arc`
-2. bootstrap the Dagger engine on ARC before any Dagger call
+1. set `runs-on: shr`
+2. run Dagger CLI commands directly using standard shell execution:
 
 ```yaml
 jobs:
   job_name:
-    runs-on: st-arc
+    runs-on: shr
 
     steps:
-      - name: Bootstrap Dagger (ARC)
-        uses: staytunedllp/devops/.github/actions/dagger-bootstrap@main
-        with:
-          namespace: dagger
-          label_selector: name=dagger-engine
-          prefer_same_node: "true"
+      - name: Run Dagger Call
+        run: |
+          dagger call -m . <function_name> --source=.
 ```
 
 ### Dagger Module Authoring Standards (TypeScript)
@@ -60,6 +57,10 @@ jobs:
 5. **Command consistency (mandatory)**
    - Use `dagger call` in examples that pass arguments (e.g., `--source`).
    - Use `dagger check` only for general check-style execution examples.
+
+6. **Subpath Imports (mandatory)**
+   - Do not use relative path imports targeting outer directories (e.g., `../shared/index.js`).
+   - Always use Node.js Subpath Imports starting with `#` (e.g., `#shared/index.js`, `#firebase/base.js`) for imports crossing directory boundaries inside `src/`. Sibling imports within the same folder can remain relative (e.g., `./base.js`).
 
 ### Caching and Layering Rules (Mandatory)
 

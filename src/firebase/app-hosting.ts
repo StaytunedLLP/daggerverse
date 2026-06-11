@@ -8,7 +8,7 @@ import {
   GCP_CREDENTIALS_PATH,
 } from "./constants.js";
 import { installFirebaseDependencies } from "./dependencies.js";
-import { shellQuote } from "../shared/path-utils.js";
+import { shellQuote } from "#shared/path-utils.js";
 
 function withAppHostingAuth(
   container: Container,

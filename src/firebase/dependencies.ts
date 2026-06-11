@@ -1,7 +1,7 @@
 import { Directory, Secret } from "@dagger.io/dagger";
-import { DEFAULT_REGISTRY_SCOPE } from "../shared/constants.js";
-import { maybeResolveNodeAuthToken } from "../shared/auth.js";
-import { withNpmAuth } from "../shared/npm.js";
+import { DEFAULT_REGISTRY_SCOPE } from "#shared/constants.js";
+import { maybeResolveNodeAuthToken } from "#shared/auth.js";
+import { withNpmAuth } from "#shared/npm.js";
 import { firebaseNodeBase } from "./base.js";
 import { FIREBASE_WORKDIR } from "./constants.js";
 

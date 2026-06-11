@@ -1,0 +1,36 @@
+name: Dagger Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dagger-validation:
+    name: Run Dagger Validation
+    runs-on: shr
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Dagger Check PR Title
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dagger call -m . check-pr-title --event-file="$GITHUB_EVENT_PATH" --github-token=env:GITHUB_TOKEN
+
+      - name: Dagger Check Build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dagger call -m . checks build --source=. --node-auth-token=env:NODE_AUTH_TOKEN
