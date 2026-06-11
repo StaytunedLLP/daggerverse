@@ -15,6 +15,7 @@
     "dist"
   ],
   "scripts": {
+    "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
@@ -26,7 +27,8 @@
     "@dagger.io/dagger": "^0.20.3"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@dagger.io/dagger": "^0.20.3"
