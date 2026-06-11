@@ -82,6 +82,17 @@ export async function runNodeChecks(
       }
 
       if (!skipTests) {
+        let testWorkspace = workspace;
+        const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
+
+        testWorkspace = testWorkspace.withExec(["bash", "-lc", [
+          STRICT_SHELL_HEADER,
+          `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+          `if ${buildCheck} 2>/dev/null; then`,
+          `  npm run build`,
+          `fi`,
+        ].join("\n")]);
+
         if (args.length > 0) {
           const runScript = [
             STRICT_SHELL_HEADER,
@@ -96,11 +107,11 @@ export async function runNodeChecks(
             `eval "$TEST_SCRIPT"`,
           ].join("\n");
 
-          workspace = workspace
+          workspace = testWorkspace
             .withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES", args.map(a => `'${a}'`).join(" "))
             .withExec(["bash", "-lc", runScript]);
         } else {
-          workspace = runNpmScript(workspace, "test", {
+          workspace = runNpmScript(testWorkspace, "test", {
             cwd: packagePath,
             args,
           });
