@@ -2,11 +2,11 @@ name: Dagger Checks
 
 on:
   pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -15,19 +15,12 @@ permissions:
 jobs:
   dagger-validation:
     name: Run Dagger Validation
+    timeout-minutes: 30
     runs-on: shr
 
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
-
-      - name: Dagger Check PR Title
-        if: github.event_name == 'pull_request'
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          dagger call -m . check-pr-title --event-file="$GITHUB_EVENT_PATH" --github-token=env:GITHUB_TOKEN
+        uses: actions/checkout@v6
 
       - name: Dagger Check Build
         env:

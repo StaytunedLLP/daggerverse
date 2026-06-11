@@ -19,25 +19,18 @@ jobs:
   # Job to run PR checks
   pr-checks:
     name: Run PR Checks
-    runs-on: st-arc
+    runs-on: shr
     timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      #   - name: Setup Node.js
-      #     uses: actions/setup-node@v6
-      #     with:
-      #       node-version: 25
+      - name: Dagger Build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}        
+        run: |
+          dagger call -m github.com/StaytunedLLP/daggerverse@v1.4.4 checks build --source=. --node-auth-token=env:NODE_AUTH_TOKEN
 
-      #   - name: Install dependencies
-      #     run: npm ci
-
-      #   - name: Run lint
-      #     run: npm run lint
-
-      #   - name: Run tests
-      #     run: npm test
 
       # Report the checks status
       - name: Report PR Checks Status
