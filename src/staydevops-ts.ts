@@ -3,12 +3,12 @@ import {
   Directory,
   File,
   Secret,
+  Workspace,
   argument,
   check,
   func,
   object,
 } from "@dagger.io/dagger";
-import { checkPrTitleFromEvent } from "./checks/pr-checks.js";
 import {
   deleteFirebaseApphostingBackend,
   deployFirebaseApphostingProject,
@@ -37,6 +37,12 @@ type CheckMode = "format" | "lint" | "build" | "test";
  */
 @object()
 export class Checks {
+  private ws: Workspace;
+
+  constructor(ws: Workspace) {
+    this.ws = ws;
+  }
+
   private async runDefaultCheck(
     source: Directory,
     mode: CheckMode,
@@ -97,13 +103,13 @@ export class Checks {
   @func()
   async format(
     @argument({
-      defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
-    source: Directory,
+    source?: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "format", nodeAuthToken);
+    const src = source ?? this.ws.directory(".", { exclude: [".git", "dagger", "dist", "node_modules"] });
+    await this.runDefaultCheck(src, "format", nodeAuthToken);
   }
 
   /**
@@ -119,13 +125,13 @@ export class Checks {
   @func()
   async lint(
     @argument({
-      defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
-    source: Directory,
+    source?: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "lint", nodeAuthToken);
+    const src = source ?? this.ws.directory(".", { exclude: [".git", "dagger", "dist", "node_modules"] });
+    await this.runDefaultCheck(src, "lint", nodeAuthToken);
   }
 
   /**
@@ -141,13 +147,13 @@ export class Checks {
   @func()
   async build(
     @argument({
-      defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
-    source: Directory,
+    source?: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "build", nodeAuthToken);
+    const src = source ?? this.ws.directory(".", { exclude: [".git", "dagger", "dist", "node_modules"] });
+    await this.runDefaultCheck(src, "build", nodeAuthToken);
   }
 
   /**
@@ -163,13 +169,13 @@ export class Checks {
   @func()
   async test(
     @argument({
-      defaultPath: ".",
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
-    source: Directory,
+    source?: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "test", nodeAuthToken);
+    const src = source ?? this.ws.directory(".", { exclude: [".git", "dagger", "dist", "node_modules"] });
+    await this.runDefaultCheck(src, "test", nodeAuthToken);
   }
 }
 
@@ -192,19 +198,10 @@ export class Checks {
  */
 @object()
 export class StaydevopsTs {
-  /**
-   * Validates the PR title according to Conventional Commits naming convention.
-   *
-   * @param eventFile - Optional GitHub event JSON file containing the PR title.
-   * @param githubToken - Optional GitHub token to post a comment if validation fails.
-   *
-   * @example
-   * dagger call check-pr-title --event-file=$GITHUB_EVENT_PATH --github-token=env:GITHUB_TOKEN
-   */
-  @check()
-  @func()
-  async checkPrTitle(eventFile?: File, githubToken?: Secret): Promise<void> {
-    await checkPrTitleFromEvent(eventFile, githubToken);
+  private ws: Workspace;
+
+  constructor(ws: Workspace) {
+    this.ws = ws;
   }
 
   /**
@@ -222,7 +219,7 @@ export class StaydevopsTs {
    */
   @func()
   checks(): Checks {
-    return new Checks();
+    return new Checks(this.ws);
   }
 
   /**

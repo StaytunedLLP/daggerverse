@@ -49,23 +49,31 @@ export async function runNodeChecks(
     exclude: DEFAULT_SOURCE_EXCLUDES,
   });
 
+  const tasks: Promise<string>[] = [];
+
   for (const packagePath of packagePaths) {
     if (options.format) {
-      workspace = runNpmScript(workspace, "format:check", { cwd: packagePath });
+      tasks.push(runNpmScript(workspace, "format:check", { cwd: packagePath }).stdout());
     }
 
     if (options.lint) {
-      workspace = runNpmScript(workspace, "lint", { cwd: packagePath });
+      tasks.push(runNpmScript(workspace, "lint", { cwd: packagePath }).stdout());
     }
 
     if (options.test) {
-      workspace = runNpmScript(workspace, "test", { cwd: packagePath });
+      tasks.push(runNpmScript(workspace, "test", { cwd: packagePath }).stdout());
     }
 
     if (options.build) {
-      workspace = runNpmScript(workspace, "build", { cwd: packagePath });
+      tasks.push(runNpmScript(workspace, "build", { cwd: packagePath }).stdout());
     }
+  }
+
+  if (tasks.length > 0) {
+    const results = await Promise.all(tasks);
+    return results.join("\n");
   }
 
   return workspace.stdout();
 }
+
