@@ -338,7 +338,7 @@ function run(): void {
     const affected = listTestsAll ? packageNames : affectedPackages(changed, files, packageNames, reverseGraph);
 
     if (listOnly) {
-      console.log(affected.join(","));
+      process.stdout.write(affected.join(",") + "\n");
       return;
     }
 
@@ -350,7 +350,7 @@ function run(): void {
       }
     }
 
-    console.log(tests.join(" "));
+    process.stdout.write(tests.join(" ") + "\n");
   } catch (error) {
     console.error("❌ Runtime Error:");
     console.error(error instanceof Error ? (error.stack ?? error.message) : error);
