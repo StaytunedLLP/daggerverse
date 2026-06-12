@@ -82,8 +82,8 @@ async function pushUpdatedPackageFiles(
 
   let container = dag
     .container()
-    .from("alpine/git:latest")
-    .withSecretVariable("GITHUB_TOKEN", options.githubToken)
+    .from("alpine:latest")
+    .withSecretVariable("GH_TOKEN", options.githubToken)
     .withDirectory(GIT_REPO_ROOT, source)
     .withDirectory("/updated", updatedWorkspace.filter(updatedFilter))
     .withExec([
@@ -91,12 +91,11 @@ async function pushUpdatedPackageFiles(
       "-c",
       [
         "set -eu",
+        "apk add --no-cache git github-cli coreutils",
         `cd ${shellQuote(GIT_REPO_ROOT)}`,
         `test -d .git || { echo "Missing git metadata in source checkout." >&2; exit 1; }`,
         `repo_owner=${shellQuote(options.repoOwner)}`,
         `repo_name=${shellQuote(options.repoName)}`,
-        `repo_url="https://x-access-token:$GITHUB_TOKEN@github.com/$repo_owner/$repo_name.git"`,
-        `git remote set-url origin "$repo_url"`,
         `git checkout -B ${shellQuote(options.prBranch)}`,
         `cp ${shellQuote(path.posix.join("/updated", packageJsonPath))} ${shellQuote(path.posix.join(repoPath, "package.json"))}`,
         `cp ${shellQuote(path.posix.join("/updated", packageLockPath))} ${shellQuote(path.posix.join(repoPath, "package-lock.json"))}`,
@@ -106,12 +105,11 @@ async function pushUpdatedPackageFiles(
         `  git rev-parse HEAD > /tmp/commit-sha`,
         `  exit 0`,
         `fi`,
-        `git config user.name ${shellQuote(GIT_USER_NAME)}`,
-        `git config user.email ${shellQuote(GIT_USER_EMAIL)}`,
-        `git add package.json package-lock.json`,
-        `git commit -m ${shellQuote(commitMessage)}`,
-        `git push origin HEAD:${shellQuote(options.prBranch)}`,
-        `git rev-parse HEAD > /tmp/commit-sha`,
+        `head_oid=$(git rev-parse HEAD)`,
+        `base64 -w 0 package.json > /tmp/p_json_content`,
+        `base64 -w 0 package-lock.json > /tmp/p_lock_content`,
+        `query='mutation($repositoryNameWithOwner: String!, $branchName: String!, $expectedHeadOid: GitObjectID!, $message: String!, $pJsonPath: String!, $pJsonContent: Base64String!, $pLockPath: String!, $pLockContent: Base64String!) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repositoryNameWithOwner, branchName: $branchName }, message: { headline: $message }, expectedHeadOid: $expectedHeadOid, fileChanges: { additions: [ { path: $pJsonPath, contents: $pJsonContent }, { path: $pLockPath, contents: $pLockContent } ] } }) { commit { oid } } }'`,
+        `gh api graphql -f query="$query" -F repositoryNameWithOwner="$repo_owner/$repo_name" -F branchName=${shellQuote(options.prBranch)} -F expectedHeadOid="$head_oid" -F message=${shellQuote(commitMessage)} -F pJsonPath=${shellQuote(packageJsonPath)} -F pJsonContent=@/tmp/p_json_content -F pLockPath=${shellQuote(packageLockPath)} -F pLockContent=@/tmp/p_lock_content --jq '.data.createCommitOnBranch.commit.oid' > /tmp/commit-sha`,
       ].join("\n"),
     ]);
 
