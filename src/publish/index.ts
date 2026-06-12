@@ -106,10 +106,10 @@ async function pushUpdatedPackageFiles(
         `  exit 0`,
         `fi`,
         `head_oid=$(git rev-parse HEAD)`,
-        `p_json_content=$(base64 -w 0 package.json)`,
-        `p_lock_content=$(base64 -w 0 package-lock.json)`,
+        `base64 -w 0 package.json > /tmp/p_json_content`,
+        `base64 -w 0 package-lock.json > /tmp/p_lock_content`,
         `query='mutation($repositoryNameWithOwner: String!, $branchName: String!, $expectedHeadOid: GitObjectID!, $message: String!, $pJsonPath: String!, $pJsonContent: Base64String!, $pLockPath: String!, $pLockContent: Base64String!) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repositoryNameWithOwner, branchName: $branchName }, message: { headline: $message }, expectedHeadOid: $expectedHeadOid, fileChanges: { additions: [ { path: $pJsonPath, contents: $pJsonContent }, { path: $pLockPath, contents: $pLockContent } ] } }) { commit { oid } } }'`,
-        `gh api graphql -f query="$query" -F repositoryNameWithOwner="$repo_owner/$repo_name" -F branchName=${shellQuote(options.prBranch)} -F expectedHeadOid="$head_oid" -F message=${shellQuote(commitMessage)} -F pJsonPath=${shellQuote(packageJsonPath)} -F pJsonContent="$p_json_content" -F pLockPath=${shellQuote(packageLockPath)} -F pLockContent="$p_lock_content" --jq '.data.createCommitOnBranch.commit.oid' > /tmp/commit-sha`,
+        `gh api graphql -f query="$query" -F repositoryNameWithOwner="$repo_owner/$repo_name" -F branchName=${shellQuote(options.prBranch)} -F expectedHeadOid="$head_oid" -F message=${shellQuote(commitMessage)} -F pJsonPath=${shellQuote(packageJsonPath)} -F pJsonContent=@/tmp/p_json_content -F pLockContent=@/tmp/p_lock_content --jq '.data.createCommitOnBranch.commit.oid' > /tmp/commit-sha`,
       ].join("\n"),
     ]);
 
