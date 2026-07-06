@@ -8,7 +8,6 @@ import {
   withFullSource,
 } from "#shared/index.js";
 import { normalizePaths, resolveWorkspacePath, shellQuote } from "#shared/path-utils.js";
-import { buildInternalSelectorProgram } from "./affected-node-tests.js";
 import type { NodeChecksOptions } from "./types.js";
 
 function buildVerifyScript(
@@ -23,6 +22,36 @@ function buildVerifyScript(
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePaths[0]))}`,
     "npm ls chromium-bidi --depth=0",
+  ].join("\n");
+}
+
+function buildRunAffectedTestScript(packagePath: string): string {
+  return [
+    STRICT_SHELL_HEADER,
+    'log_file="/tmp/staystack-incremental-test.log"',
+    "status=0",
+    "{",
+    `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+    `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
+    'published="$(npm view @staytunedllp/staystack version)"',
+    'installed="$(npm list -g @staytunedllp/staystack --depth=0 --json 2>/dev/null | node -e \'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { try { const parsed = JSON.parse(input); process.stdout.write(parsed.dependencies?.["@staytunedllp/staystack"]?.version ?? ""); } catch {} });\')"',
+    'if node -e \'const [installed, published] = process.argv.slice(1); const parts = (value) => value.split(".").map((part) => Number.parseInt(part, 10) || 0); const older = (a, b) => { const av = parts(a); const bv = parts(b); for (let index = 0; index < Math.max(av.length, bv.length); index += 1) { if ((av[index] ?? 0) < (bv[index] ?? 0)) return true; if ((av[index] ?? 0) > (bv[index] ?? 0)) return false; } return false; }; process.exit(installed && !older(installed, published) ? 0 : 1);\' "$installed" "$published"; then',
+    '  echo "staystack CLI ${installed} is current."',
+    "else",
+    '  echo "Installing staystack CLI ${published}."',
+    "  npm install -g @staytunedllp/staystack@latest",
+    "fi",
+    'test -d .git || { echo "Missing git metadata required by npm run test:incremental." >&2; exit 1; }',
+    'echo "Running native incremental tests with git metadata available."',
+    "git status --short --branch",
+    "if [ -f .staystack/package.json ]; then",
+    "  mkdir -p .staystack/node_modules/@staytunedllp",
+    "  ln -sfn /workspace .staystack/node_modules/@staytunedllp/staystack",
+    "fi",
+    "npm run test:incremental",
+    '} > "${log_file}" 2>&1 || status=$?',
+    'cat "${log_file}"',
+    'exit "${status}"',
   ].join("\n");
 }
 
@@ -47,7 +76,9 @@ export async function runNodeChecks(
   }
 
   let workspace = withFullSource(installed, source, {
-    exclude: DEFAULT_SOURCE_EXCLUDES,
+    exclude: options.runAffected
+      ? DEFAULT_SOURCE_EXCLUDES.filter((entry) => entry !== ".git")
+      : DEFAULT_SOURCE_EXCLUDES,
   });
 
   for (const packagePath of packagePaths) {
@@ -60,28 +91,13 @@ export async function runNodeChecks(
     }
 
     if (options.test) {
-      let args: string[] = [];
-      let skipTests = false;
-
       if (options.runAffected) {
-        const program = buildInternalSelectorProgram(
-          options.base ?? "origin/main",
-        );
-        const runContainer = workspace
-          .withEnvVariable("STAYTUNED_AFFECTED_RUNTIME_EXECUTE", "1")
-          .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
-          .withNewFile("/tmp/affected-node-tests.ts", program)
-          .withExec(["node", "--experimental-strip-types", "/tmp/affected-node-tests.ts"]);
-        
-        const affectedTestsStr = (await runContainer.stdout()).trim();
-        if (affectedTestsStr.length === 0) {
-          skipTests = true;
-        } else {
-          args = affectedTestsStr.split(/\s+/).filter((val) => val.length > 0);
-        }
-      }
-
-      if (!skipTests) {
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          buildRunAffectedTestScript(packagePath),
+        ]);
+      } else {
         let testWorkspace = workspace;
         const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
 
@@ -92,32 +108,9 @@ export async function runNodeChecks(
           `  npm run build`,
           `fi`,
         ].join("\n")]);
-
-        if (args.length > 0) {
-          const runScript = [
-            STRICT_SHELL_HEADER,
-            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-            `TEST_SCRIPT=$(node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              let script = pkg.scripts.test || 'node --test';
-              script = script.replace(/['\\\"\\\`]?src\\\\/\\\\*\\\\*\\\\/[^'\\\"\\\`\\\\s]+['\\\"\\\`]?/g, process.env.STAYTUNED_AFFECTED_TEST_FILES);
-              console.log(script);
-            ")`,
-            `eval "$TEST_SCRIPT"`,
-          ].join("\n");
-
-          workspace = testWorkspace
-            .withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES", args.map(a => `'${a}'`).join(" "))
-            .withExec(["bash", "-lc", runScript]);
-        } else {
-          workspace = runNpmScript(testWorkspace, "test", {
-            cwd: packagePath,
-            args,
-          });
-        }
-      } else {
-        workspace = workspace.withExec(["echo", "No affected tests found to run."]);
+        workspace = runNpmScript(testWorkspace, "test", {
+          cwd: packagePath,
+        });
       }
     }
 

@@ -152,13 +152,14 @@ export class Checks {
 
   /**
    * Executes the standard repository test suite using the `npm run test` command.
-   * Supports intelligent execution of affected tests via `runAffected`.
+   * Supports incremental execution of affected tests via the repository's
+   * `npm run test:incremental` script when `runAffected` is enabled.
    *
    * @param source - Repository source directory to test.
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   * @param runAffected - Enable intelligent test discovery to run only tests affected by your current git diff.
-   * @param base - The base git ref to compare against for affected discovery (e.g. 'origin/main').
-   * @param changedFiles - Manually specify a list of changed files to use for affected discovery, bypassing git diff.
+   * @param runAffected - Run the repository's incremental test script instead of the full test suite.
+   * @param base - Retained for compatibility with older workflows.
+   * @param changedFiles - Retained for compatibility with older workflows.
    *
    * @example
    * dagger call checks test --source . --run-affected
@@ -168,7 +169,7 @@ export class Checks {
   async test(
     @argument({
       defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
+      ignore: ["dagger", "dist", "node_modules"],
     })
     source: Directory,
     nodeAuthToken?: Secret,
