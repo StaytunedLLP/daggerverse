@@ -11,6 +11,103 @@ import { normalizePaths, resolveWorkspacePath, shellQuote } from "#shared/path-u
 import { buildInternalSelectorProgram } from "./affected-node-tests.js";
 import type { NodeChecksOptions } from "./types.js";
 
+const STAYTUNED_AFFECTED_BUILD_BUILDER = `
+const fs = require('fs');
+const path = require('path');
+const files = JSON.parse(process.env.STAYTUNED_AFFECTED_TEST_FILES_JSON);
+const configs = new Set();
+for (const file of files) {
+  let dir = path.dirname(file);
+  while (dir !== '.' && dir !== '/' && dir !== '') {
+    const testJson = path.join(dir, 'tsconfig.test.json');
+    const normalJson = path.join(dir, 'tsconfig.json');
+    if (fs.existsSync(testJson)) {
+      configs.add(testJson);
+      break;
+    }
+    if (fs.existsSync(normalJson)) {
+      configs.add(normalJson);
+      break;
+    }
+    dir = path.dirname(dir);
+  }
+}
+if (configs.size > 0) {
+  const cmd = 'npx tsgo --build ' + Array.from(configs).join(' ');
+  console.log('Building affected configs:', cmd);
+  require('child_process').execSync(cmd, { stdio: 'inherit' });
+} else {
+  console.log('No specific tsconfig files found, falling back to npm run build');
+  if (fs.existsSync('package.json')) {
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    if (pkg.scripts && pkg.scripts.build) {
+      require('child_process').execSync('npm run build', { stdio: 'inherit' });
+    }
+  }
+}
+`;
+
+function replaceTestScript(script: string, affectedFiles: string[]): string {
+  const targetRegex = /([a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*)\/\*\*\/[a-zA-Z0-9_*.-]+\.([a-zA-Z0-9]+)/g;
+  let match;
+  const targets: Array<{ raw: string; dir: string; ext: string }> = [];
+  while ((match = targetRegex.exec(script)) !== null) {
+    targets.push({
+      raw: match[0],
+      dir: match[1],
+      ext: match[2]
+    });
+  }
+
+  if (targets.length > 0) {
+    const target = targets.find(t => t.dir !== "src") || targets[0];
+    const mappedFiles = affectedFiles.map(f => {
+      const clean = f.startsWith("'") && f.endsWith("'") ? f.slice(1, -1) : f;
+      if (clean.startsWith("src/") && target.dir !== "src") {
+        const relativePart = clean.slice(4);
+        const mappedPath = target.dir + "/" + relativePart.replace(/\.ts$/, "." + target.ext).replace(/\.js$/, "." + target.ext);
+        return "'" + mappedPath + "'";
+      }
+      return f;
+    }).join(" ");
+
+    let replaced = false;
+    let replacedScript = script;
+    for (const t of targets) {
+      const targetStr = t.raw;
+      const index = replacedScript.indexOf(targetStr);
+      if (index !== -1) {
+        const prevChar = replacedScript[index - 1];
+        const nextChar = replacedScript[index + targetStr.length];
+        const isQuote = prevChar === nextChar && ["'", '"', '`'].includes(prevChar);
+
+        if (isQuote) {
+          const quoted = prevChar + targetStr + nextChar;
+          replacedScript = replacedScript.replace(quoted, () => {
+            if (!replaced) {
+              replaced = true;
+              return mappedFiles;
+            }
+            return "";
+          });
+        } else {
+          replacedScript = replacedScript.replace(targetStr, () => {
+            if (!replaced) {
+              replaced = true;
+              return mappedFiles;
+            }
+            return "";
+          });
+        }
+      }
+    }
+    return replacedScript;
+  }
+
+  const quotedArgs = affectedFiles.map(f => f.startsWith("'") && f.endsWith("'") ? f : `'${f}'`).join(" ");
+  return script.replace(/['"`]?src\/\*\*\/[^'"`\s]+['"`]?/g, quotedArgs);
+}
+
 function buildVerifyScript(
   packagePaths: string[],
   verifyChromiumBidi: boolean,
@@ -90,47 +187,14 @@ export async function runNodeChecks(
         ].join("\n");
 
         if (options.runAffected && args.length > 0) {
-          testWorkspace = testWorkspace.withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES_JSON", JSON.stringify(args));
+          testWorkspace = testWorkspace
+            .withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES_JSON", JSON.stringify(args))
+            .withEnvVariable("STAYTUNED_AFFECTED_BUILD_BUILDER", STAYTUNED_AFFECTED_BUILD_BUILDER);
           buildScript = [
             STRICT_SHELL_HEADER,
             `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
             symlinkScript,
-            `node -e "
-              const fs = require('fs');
-              const path = require('path');
-              const files = JSON.parse(process.env.STAYTUNED_AFFECTED_TEST_FILES_JSON);
-              const configs = new Set();
-              for (const file of files) {
-                let dir = path.dirname(file);
-                while (dir !== '.' && dir !== '/' && dir !== '') {
-                  const testJson = path.join(dir, 'tsconfig.test.json');
-                  const normalJson = path.join(dir, 'tsconfig.json');
-                  if (fs.existsSync(testJson)) {
-                    configs.add(testJson);
-                    break;
-                  }
-                  if (fs.existsSync(normalJson)) {
-                    configs.add(normalJson);
-                    break;
-                  }
-                  dir = path.dirname(dir);
-                }
-              }
-              if (configs.size > 0) {
-                const cmd = 'npx tsgo --build ' + Array.from(configs).join(' ');
-                console.log('Building affected configs:', cmd);
-                require('child_process').execSync(cmd, { stdio: 'inherit' });
-              } else {
-                console.log('No specific tsconfig files found, falling back to npm run build');
-                if (fs.existsSync('package.json')) {
-                  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-                  if (pkg.scripts && pkg.scripts.build) {
-                    require('child_process').execSync('npm run build', { stdio: 'inherit' });
-                  }
-                }
-              }
-            "
-            `
+            `node -e "$STAYTUNED_AFFECTED_BUILD_BUILDER"`,
           ].join("\n");
         } else {
           buildScript = [
@@ -148,78 +212,29 @@ export async function runNodeChecks(
         testWorkspace = testWorkspace.withExec(["bash", "-lc", buildScript]);
 
         if (args.length > 0) {
+          const pkgFilePath = packagePath === "." ? "package.json" : `${packagePath}/package.json`;
+          let pkgContent = "";
+          try {
+            pkgContent = await source.file(pkgFilePath).contents();
+          } catch {}
+
+          let script = "node --test";
+          if (pkgContent) {
+            try {
+              const pkg = JSON.parse(pkgContent);
+              script = pkg.scripts?.test || "node --test";
+            } catch {}
+          }
+
+          const replacedScript = replaceTestScript(script, args);
+
           const runScript = [
             STRICT_SHELL_HEADER,
             `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-            `TEST_SCRIPT=$(node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync(\\\"package.json\\\", \\\"utf8\\\"));
-              let script = pkg.scripts.test || \\\"node --test\\\";
-              const affectedFiles = process.env.STAYTUNED_AFFECTED_TEST_FILES;
-
-              const targetRegex = /([a-zA-Z0-9_.-]+(?:\\\\/[a-zA-Z0-9_.-]+)*)\\\\/\\\\*\\\\*\\\\/[a-zA-Z0-9_*.-]+\\\\.([a-zA-Z0-9]+)/g;
-              let match;
-              const targets = [];
-              while ((match = targetRegex.exec(script)) !== null) {
-                targets.push({
-                  raw: match[0],
-                  dir: match[1],
-                  ext: match[2]
-                });
-              }
-
-              if (targets.length > 0) {
-                const target = targets.find(t => t.dir !== \\\"src\\\") || targets[0];
-                const mappedFiles = affectedFiles.split(\\\" \\\").map(f => {
-                  const clean = f.startsWith(String.fromCharCode(39)) && f.endsWith(String.fromCharCode(39)) ? f.slice(1, -1) : f;
-                  if (clean.startsWith(\\\"src/\\\") && target.dir !== \\\"src\\\") {
-                    const relativePart = clean.slice(4);
-                    const mappedPath = target.dir + \\\"/\\\" + relativePart.replace(/\\\\.ts$/, \\\".\\\" + target.ext).replace(/\\\\.js$/, \\\".\\\" + target.ext);
-                    return String.fromCharCode(39) + mappedPath + String.fromCharCode(39);
-                  }
-                  return f;
-                }).join(\\\" \\\");
-
-                let replaced = false;
-                for (const t of targets) {
-                  const targetStr = t.raw;
-                  const index = script.indexOf(targetStr);
-                  if (index !== -1) {
-                    const prevChar = script[index - 1];
-                    const nextChar = script[index + targetStr.length];
-                    const isQuote = prevChar === nextChar && [String.fromCharCode(39), \\\"\\\\\\\"\\\", String.fromCharCode(96)].includes(prevChar);
-
-                    if (isQuote) {
-                      const quoted = prevChar + targetStr + nextChar;
-                      script = script.replace(quoted, () => {
-                        if (!replaced) {
-                          replaced = true;
-                          return mappedFiles;
-                        }
-                        return \\\"\\\";
-                      });
-                    } else {
-                      script = script.replace(targetStr, () => {
-                        if (!replaced) {
-                          replaced = true;
-                          return mappedFiles;
-                        }
-                        return \\\"\\\";
-                      });
-                    }
-                  }
-                }
-              } else {
-                script = script.replace(/[\\x22\\x27\\x60]?src\\\\/\\\\*\\\\*\\\\/[^\\x22\\x27\\x60\\s]+[\\x22\\x27\\x60]?/g, affectedFiles);
-              }
-              console.log(script);
-            ")`,
-            `eval "$TEST_SCRIPT"`,
+            replacedScript,
           ].join("\n");
 
-          workspace = testWorkspace
-            .withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES", args.map(a => `'${a}'`).join(" "))
-            .withExec(["bash", "-lc", runScript]);
+          workspace = testWorkspace.withExec(["bash", "-lc", runScript]);
         } else {
           workspace = runNpmScript(testWorkspace, "test", {
             cwd: packagePath,
