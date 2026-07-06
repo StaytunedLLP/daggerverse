@@ -80,18 +80,62 @@ export async function runNodeChecks(
           args = affectedTestsStr.split(/\s+/).filter((val) => val.length > 0);
         }
       }
-
       if (!skipTests) {
         let testWorkspace = workspace;
-        const buildScript = [
-          STRICT_SHELL_HEADER,
-          `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-          `if node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts['type-check'] ? 0 : 1)" 2>/dev/null; then`,
-          `  npm run type-check`,
-          `elif node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)" 2>/dev/null; then`,
-          `  npm run build`,
-          `fi`,
-        ].join("\n");
+        let buildScript = "";
+        if (options.runAffected && args.length > 0) {
+          testWorkspace = testWorkspace.withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES_JSON", JSON.stringify(args));
+          buildScript = [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `node -e "
+              const fs = require('fs');
+              const path = require('path');
+              const files = JSON.parse(process.env.STAYTUNED_AFFECTED_TEST_FILES_JSON);
+              const configs = new Set();
+              for (const file of files) {
+                let dir = path.dirname(file);
+                while (dir !== '.' && dir !== '/' && dir !== '') {
+                  const testJson = path.join(dir, 'tsconfig.test.json');
+                  const normalJson = path.join(dir, 'tsconfig.json');
+                  if (fs.existsSync(testJson)) {
+                    configs.add(testJson);
+                    break;
+                  }
+                  if (fs.existsSync(normalJson)) {
+                    configs.add(normalJson);
+                    break;
+                  }
+                  dir = path.dirname(dir);
+                }
+              }
+              if (configs.size > 0) {
+                const cmd = 'npx tsgo --build ' + Array.from(configs).join(' ');
+                console.log('Building affected configs:', cmd);
+                require('child_process').execSync(cmd, { stdio: 'inherit' });
+              } else {
+                console.log('No specific tsconfig files found, falling back to npm run build');
+                if (fs.existsSync('package.json')) {
+                  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+                  if (pkg.scripts && pkg.scripts.build) {
+                    require('child_process').execSync('npm run build', { stdio: 'inherit' });
+                  }
+                }
+              }
+            "
+            `
+          ].join("\n");
+        } else {
+          buildScript = [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `if node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts['type-check'] ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run type-check`,
+            `elif node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run build`,
+            `fi`,
+          ].join("\n");
+        }
 
         testWorkspace = testWorkspace.withExec(["bash", "-lc", buildScript]);
 
