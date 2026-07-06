@@ -99,8 +99,8 @@ export async function runNodeChecks(
             `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
             `TEST_SCRIPT=$(node -e "
               const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              let script = pkg.scripts.test || 'node --test';
+              const pkg = JSON.parse(fs.readFileSync(\\\"package.json\\\", \\\"utf8\\\"));
+              let script = pkg.scripts.test || \\\"node --test\\\";
               const affectedFiles = process.env.STAYTUNED_AFFECTED_TEST_FILES;
 
               const targetRegex = /([a-zA-Z0-9_.-]+(?:\\\\/[a-zA-Z0-9_.-]+)*)\\\\/\\\\*\\\\*\\\\/[a-zA-Z0-9_*.-]+\\\\.([a-zA-Z0-9]+)/g;
@@ -115,16 +115,16 @@ export async function runNodeChecks(
               }
 
               if (targets.length > 0) {
-                const target = targets.find(t => t.dir !== 'src') || targets[0];
-                const mappedFiles = affectedFiles.split(' ').map(f => {
-                  const clean = f.replace(/^'|'$/g, '');
-                  if (clean.startsWith('src/') && target.dir !== 'src') {
+                const target = targets.find(t => t.dir !== \\\"src\\\") || targets[0];
+                const mappedFiles = affectedFiles.split(\\\" \\\").map(f => {
+                  const clean = f.startsWith(String.fromCharCode(39)) && f.endsWith(String.fromCharCode(39)) ? f.slice(1, -1) : f;
+                  if (clean.startsWith(\\\"src/\\\") && target.dir !== \\\"src\\\") {
                     const relativePart = clean.slice(4);
-                    const mappedPath = target.dir + '/' + relativePart.replace(/\\\\.ts$/, '.' + target.ext).replace(/\\\\.js$/, '.' + target.ext);
-                    return \\"\\'\\" + mappedPath + \\"\\'\\";
+                    const mappedPath = target.dir + \\\"/\\\" + relativePart.replace(/\\\\.ts$/, \\\".\\\" + target.ext).replace(/\\\\.js$/, \\\".\\\" + target.ext);
+                    return String.fromCharCode(39) + mappedPath + String.fromCharCode(39);
                   }
                   return f;
-                }).join(' ');
+                }).join(\\\" \\\");
 
                 let replaced = false;
                 for (const t of targets) {
@@ -133,7 +133,7 @@ export async function runNodeChecks(
                   if (index !== -1) {
                     const prevChar = script[index - 1];
                     const nextChar = script[index + targetStr.length];
-                    const isQuote = prevChar === nextChar && ["'", '\\"', String.fromCharCode(96)].includes(prevChar);
+                    const isQuote = prevChar === nextChar && [String.fromCharCode(39), \\\"\\\\\\\"\\\", String.fromCharCode(96)].includes(prevChar);
 
                     if (isQuote) {
                       const quoted = prevChar + targetStr + nextChar;
@@ -142,7 +142,7 @@ export async function runNodeChecks(
                           replaced = true;
                           return mappedFiles;
                         }
-                        return '';
+                        return \\\"\\\";
                       });
                     } else {
                       script = script.replace(targetStr, () => {
@@ -150,7 +150,7 @@ export async function runNodeChecks(
                           replaced = true;
                           return mappedFiles;
                         }
-                        return '';
+                        return \\\"\\\";
                       });
                     }
                   }
