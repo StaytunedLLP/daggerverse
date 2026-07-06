@@ -83,11 +83,18 @@ export async function runNodeChecks(
       if (!skipTests) {
         let testWorkspace = workspace;
         let buildScript = "";
+        const symlinkScript = [
+          `mkdir -p node_modules/@staytunedllp`,
+          `ln -sf ../.. node_modules/@staytunedllp/staystack`,
+          `ln -sf ../../.staystack node_modules/@staytunedllp/staystack-config`,
+        ].join("\n");
+
         if (options.runAffected && args.length > 0) {
           testWorkspace = testWorkspace.withEnvVariable("STAYTUNED_AFFECTED_TEST_FILES_JSON", JSON.stringify(args));
           buildScript = [
             STRICT_SHELL_HEADER,
             `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            symlinkScript,
             `node -e "
               const fs = require('fs');
               const path = require('path');
@@ -129,6 +136,7 @@ export async function runNodeChecks(
           buildScript = [
             STRICT_SHELL_HEADER,
             `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            symlinkScript,
             `if node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts['type-check'] ? 0 : 1)" 2>/dev/null; then`,
             `  npm run type-check`,
             `elif node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)" 2>/dev/null; then`,
