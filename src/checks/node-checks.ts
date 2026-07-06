@@ -156,7 +156,7 @@ export async function runNodeChecks(
                   }
                 }
               } else {
-                script = script.replace(/['\\\"\\\`]?src\\\\/\\\\*\\\\*\\\\/[^'\\\"\\\`\\\\s]+['\\\"\\\`]?/g, affectedFiles);
+                script = script.replace(/['\\\"]?src\\\\/\\\\*\\\\*\\\\/[^'\\\\\"\\\\s]+['\\\"]?/g, affectedFiles);
               }
               console.log(script);
             ")`,
