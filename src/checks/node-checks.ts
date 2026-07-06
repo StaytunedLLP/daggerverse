@@ -83,15 +83,17 @@ export async function runNodeChecks(
 
       if (!skipTests) {
         let testWorkspace = workspace;
-        const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
-
-        testWorkspace = testWorkspace.withExec(["bash", "-lc", [
+        const buildScript = [
           STRICT_SHELL_HEADER,
           `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-          `if ${buildCheck} 2>/dev/null; then`,
+          `if node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts['type-check'] ? 0 : 1)" 2>/dev/null; then`,
+          `  npm run type-check`,
+          `elif node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)" 2>/dev/null; then`,
           `  npm run build`,
           `fi`,
-        ].join("\n")]);
+        ].join("\n");
+
+        testWorkspace = testWorkspace.withExec(["bash", "-lc", buildScript]);
 
         if (args.length > 0) {
           const runScript = [
