@@ -17,7 +17,7 @@ When the user asks for help with this skill (e.g., "help devops-pr-monitor", "wh
 - **Expected Inputs**: PR number or branch name of the consumer repository, repository scopes, and node tokens.
 - **Parameters**: Optional custom branch names, check names, or target folders.
 - **Example Prompts**:
-  1. "Run devops-pr-monitor for staystack PR 340"
+  1. "Run devops-pr-monitor for staystack PR 340 --wait"
   2. "Monitor PR checks on branch fix-playwright-deps and fix any GHA bugs in node-checks.ts"
   3. "Audit GHA logs for the recent affected-tests run on PR 340 and update the daggerverse module"
 - **Prerequisites**: Access to the GitHub CLI (`gh`), valid repository checkouts, and Dagger CLI.
@@ -61,6 +61,7 @@ Required:
 
 Optional:
 - `checkName`: Filter logs/results for a specific check (default: `affected-tests`).
+- `--wait`: Polling flag to wait until GHA checks complete before exiting.
 
 ## Outputs
 
@@ -73,7 +74,7 @@ Optional:
 ### PR Monitoring & Auto-Fix Loop
 
 1. **Intake & PR Identification**: Resolve the target PR number. If not provided, fetch the active PR number using `gh pr view --json number -q .number`.
-2. **Run Monitor Script**: Execute `node .agent/skills/devops-pr-monitor/scripts/monitor-pr.js <prNumber>`.
+2. **Run Monitor Script (with `--wait`)**: Execute `node .agent/skills/devops-pr-monitor/scripts/monitor-pr.js <prNumber> --wait` in the background.
 3. **Analyze Exit Code**:
    - **Exit Code 0**: Report that all checks are successful (green) and exit.
    - **Exit Code 1**: Read the written JSON status report from `.artifacts/pr-monitor/pr-<prNumber>-status.json`.
@@ -83,7 +84,7 @@ Optional:
    - If stale GHA workflow template: Synchronize the template file under `src/stayarch/profiles/` to align with root.
 6. **Local Build Check**: Run `npm run build` in the provider repository (`daggerverse`) to make sure the fix compiles cleanly.
 7. **Commit & Push**: Commit the fix in the provider repo and push it to the remote branch.
-8. **Wait and Loop**: Schedule a timer for 45 seconds to wait for GHA, then run step 2 again to monitor. Repeat until the checks succeed.
+8. **Repeat Loop**: Run the background monitoring script again until the checks succeed.
 
 ## Rules
 
@@ -101,6 +102,11 @@ Optional:
   - *Rationale*: Node.js ESM loader will otherwise fail with `Cannot find package` when configs or sub-packages are executed.
   - *Bad*: Relying on default `npm ci` behavior when no workspaces are defined.
   - *Good*: Adding explicit `ln -sf` commands to the container workspace build script.
+
+- **rule/stale-template-sync**: If the lint fails on stale arch config template file mismatch, edit the template file inside `src/stayarch/profiles/` rather than editing the root config file directly.
+  - *Rationale*: Arch template synchronization will overwrite root files anyway, so template updates are the correct single-source-of-truth fixes.
+  - *Bad*: Manually modifying the generated file in the root folder without updating the source template.
+  - *Good*: Modifying the template file and then compiling the changes.
 
 ---
 
