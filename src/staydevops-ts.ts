@@ -152,7 +152,7 @@ export class Checks {
 
   /**
    * Executes the standard repository test suite using the `npm run test` command.
-   * Supports incremental execution of affected tests via the repository's
+   * Supports incremental execution of affected tests of the changed files via the repository's
    * `npm run test:incremental` script when `runAffected` is enabled.
    *
    * @param source - Repository source directory to test.
