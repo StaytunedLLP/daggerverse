@@ -128,15 +128,32 @@ export async function runNodeChecks(
 
                 let replaced = false;
                 for (const t of targets) {
-                  const escapedT = t.raw.replace(/[.*+?^\\\${}()|[\\]\\\\\\\\]/g, '\\\\\\\\$&');
-                  const searchRegex = new RegExp(\\\"['\\\\\\\\\\\"\\\\\\\\\`]?\\\" + escapedT + \\\"['\\\\\\\\\\\"\\\\\\\\\`]?\\\", 'g');
-                  script = script.replace(searchRegex, () => {
-                    if (!replaced) {
-                      replaced = true;
-                      return mappedFiles;
+                  const targetStr = t.raw;
+                  const index = script.indexOf(targetStr);
+                  if (index !== -1) {
+                    const prevChar = script[index - 1];
+                    const nextChar = script[index + targetStr.length];
+                    const isQuote = prevChar === nextChar && ["'", '\\"', String.fromCharCode(96)].includes(prevChar);
+
+                    if (isQuote) {
+                      const quoted = prevChar + targetStr + nextChar;
+                      script = script.replace(quoted, () => {
+                        if (!replaced) {
+                          replaced = true;
+                          return mappedFiles;
+                        }
+                        return '';
+                      });
+                    } else {
+                      script = script.replace(targetStr, () => {
+                        if (!replaced) {
+                          replaced = true;
+                          return mappedFiles;
+                        }
+                        return '';
+                      });
                     }
-                    return '';
-                  });
+                  }
                 }
               } else {
                 script = script.replace(/['\\\\\\\"\\\\\\\`]?src\\\\\\\\/\\\\\\\\*\\\\\\\\*\\\\\\\\/[^'\\\\\\\"\\\\\\\`\\\\\\\\s]+['\\\\\\\"\\\\\\\`]?/g, affectedFiles);
