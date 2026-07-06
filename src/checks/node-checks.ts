@@ -101,7 +101,46 @@ export async function runNodeChecks(
               const fs = require('fs');
               const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
               let script = pkg.scripts.test || 'node --test';
-              script = script.replace(/['\\\"\\\`]?src\\\\/\\\\*\\\\*\\\\/[^'\\\"\\\`\\\\s]+['\\\"\\\`]?/g, process.env.STAYTUNED_AFFECTED_TEST_FILES);
+              const affectedFiles = process.env.STAYTUNED_AFFECTED_TEST_FILES;
+
+              const targetRegex = /([a-zA-Z0-9_.-]+(?:\\\\/[a-zA-Z0-9_.-]+)*)\\\\/\\\\*\\\\*\\\\/[a-zA-Z0-9_*.-]+\\\\.([a-zA-Z0-9]+)/g;
+              let match;
+              const targets = [];
+              while ((match = targetRegex.exec(script)) !== null) {
+                targets.push({
+                  raw: match[0],
+                  dir: match[1],
+                  ext: match[2]
+                });
+              }
+
+              if (targets.length > 0) {
+                const target = targets.find(t => t.dir !== 'src') || targets[0];
+                const mappedFiles = affectedFiles.split(' ').map(f => {
+                  const clean = f.replace(/^'|'$/g, '');
+                  if (clean.startsWith('src/') && target.dir !== 'src') {
+                    const relativePart = clean.slice(4);
+                    const mappedPath = target.dir + '/' + relativePart.replace(/\\\\.ts$/, '.' + target.ext).replace(/\\\\.js$/, '.' + target.ext);
+                    return \\"\\'\\" + mappedPath + \\"\\'\\";
+                  }
+                  return f;
+                }).join(' ');
+
+                let replaced = false;
+                for (const t of targets) {
+                  const escapedT = t.raw.replace(/[.*+?^\\\${}()|[\\]\\\\\\\\]/g, '\\\\\\\\$&');
+                  const searchRegex = new RegExp(\\\"['\\\\\\\\\\\"\\\\\\\\\`]?\\\" + escapedT + \\\"['\\\\\\\\\\\"\\\\\\\\\`]?\\\", 'g');
+                  script = script.replace(searchRegex, () => {
+                    if (!replaced) {
+                      replaced = true;
+                      return mappedFiles;
+                    }
+                    return '';
+                  });
+                }
+              } else {
+                script = script.replace(/['\\\\\\\"\\\\\\\`]?src\\\\\\\\/\\\\\\\\*\\\\\\\\*\\\\\\\\/[^'\\\\\\\"\\\\\\\`\\\\\\\\s]+['\\\\\\\"\\\\\\\`]?/g, affectedFiles);
+              }
               console.log(script);
             ")`,
             `eval "$TEST_SCRIPT"`,
