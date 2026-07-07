@@ -28,9 +28,6 @@ function buildVerifyScript(
 function buildRunAffectedTestScript(packagePath: string): string {
   return [
     STRICT_SHELL_HEADER,
-    'log_file="/tmp/staystack-incremental-test.log"',
-    "status=0",
-    "{",
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
     'published="$(npm view @staytunedllp/staystack version)"',
@@ -49,9 +46,6 @@ function buildRunAffectedTestScript(packagePath: string): string {
     "  ln -sfn /workspace .staystack/node_modules/@staytunedllp/staystack",
     "fi",
     "npm run test:incremental",
-    '} > "${log_file}" 2>&1 || status=$?',
-    'cat "${log_file}"',
-    'exit "${status}"',
   ].join("\n");
 }
 
