@@ -25,19 +25,28 @@ function buildVerifyScript(
   ].join("\n");
 }
 
-function buildRunAffectedTestScript(packagePath: string): string {
+function buildInstallGlobalCliScript(packagePaths: string[]): string {
+  const packagePath = packagePaths.length > 0 ? packagePaths[0] : ".";
   return [
     STRICT_SHELL_HEADER,
-    `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
+    `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     'published="$(npm view @staytunedllp/staystack version 2>/dev/null || echo "0.0.0")"',
-    'installed="$((npm list -g @staytunedllp/staystack --depth=0 --json 2>/dev/null || true) | node -e \'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { try { const parsed = JSON.parse(input); process.stdout.write(parsed.dependencies?.["@staytunedllp/staystack"]?.version ?? ""); } catch {} });\' )"',
+    'installed="$((npm list -g @staytunedllp/staystack --depth=0 --json 2>/dev/null || true) | node -e \'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { try { const parsed = JSON.parse(input); process.stdout.write(parsed.dependencies?.["@staytunedllp/staystack"]?.version ?? ""); } catch {} });\')"',
     'if node -e \'const [installed, published] = process.argv.slice(1); const parts = (value) => value.split(".").map((part) => Number.parseInt(part, 10) || 0); const older = (a, b) => { const av = parts(a); const bv = parts(b); for (let index = 0; index < Math.max(av.length, bv.length); index += 1) { if ((av[index] ?? 0) < (bv[index] ?? 0)) return true; if ((av[index] ?? 0) > (bv[index] ?? 0)) return false; } return false; }; process.exit(installed && !older(installed, published) ? 0 : 1);\' "$installed" "$published"; then',
     '  echo "staystack CLI ${installed} is current."',
     "else",
     '  echo "Installing staystack CLI ${published}."',
     "  npm install -g @staytunedllp/staystack@latest",
     "fi",
+  ].join("\n");
+}
+
+function buildRunAffectedTestScript(packagePath: string): string {
+  return [
+    STRICT_SHELL_HEADER,
+    `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+    `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
     'test -d .git || { echo "Missing git metadata required by npm run test:incremental." >&2; exit 1; }',
     'echo "Running native incremental tests with git metadata available."',
     "git status --short --branch",
@@ -66,6 +75,14 @@ export async function runNodeChecks(
       "bash",
       "-lc",
       buildVerifyScript(packagePaths, true),
+    ]);
+  }
+
+  if (options.runAffected) {
+    installed = installed.withExec([
+      "bash",
+      "-lc",
+      buildInstallGlobalCliScript(packagePaths),
     ]);
   }
 
