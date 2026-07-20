@@ -22,6 +22,11 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v6
 
+      - name: Install Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v0.21.7" BIN_DIR=/usr/local/bin sudo sh
+          dagger version
+
       - name: Dagger Check Build
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
