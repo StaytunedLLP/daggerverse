@@ -25,10 +25,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Dagger
-        uses: dagger/setup-dagger@v2
-        with:
-          version: "v0.21.7"
+      - name: Install Dagger CLI
+        run: |
+          INSTALL_DIR="$HOME/.local/bin"
+          mkdir -p "$INSTALL_DIR"
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v0.21.7" BIN_DIR="$INSTALL_DIR" sh
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
 
       - name: Dagger Build
         env:
