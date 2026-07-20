@@ -16,7 +16,7 @@ jobs:
   dagger-validation:
     name: Run Dagger Validation
     timeout-minutes: 30
-    runs-on: shr
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Source
