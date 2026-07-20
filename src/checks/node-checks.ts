@@ -7,7 +7,11 @@ import {
   runNpmScript,
   withFullSource,
 } from "#shared/index.js";
-import { normalizePaths, resolveWorkspacePath, shellQuote } from "#shared/path-utils.js";
+import {
+  normalizePaths,
+  resolveWorkspacePath,
+  shellQuote,
+} from "#shared/path-utils.js";
 import type { NodeChecksOptions } from "./types.js";
 
 function buildVerifyScript(
@@ -112,14 +116,18 @@ export async function runNodeChecks(
         let testWorkspace = workspace;
         const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
 
-        testWorkspace = testWorkspace.withExec(["bash", "-lc", [
-          STRICT_SHELL_HEADER,
-          `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-          `if ${buildCheck} 2>/dev/null; then`,
-          `  npm run build`,
-          `fi`,
-        ].join("\n")]);
-        workspace = runNpmScript(testWorkspace, "test", {
+        testWorkspace = testWorkspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `if ${buildCheck} 2>/dev/null; then`,
+            `  npm run build`,
+            `fi`,
+          ].join("\n"),
+        ]);
+        workspace = runNpmScript(testWorkspace, options.testScript ?? "test", {
           cwd: packagePath,
         });
       }
