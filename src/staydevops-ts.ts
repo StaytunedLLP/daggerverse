@@ -174,12 +174,14 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
     runAffected = false,
+    testScript = "test",
     base = "origin/main",
     changedFiles = "",
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
       test: true,
       runAffected,
+      testScript,
       base,
       changedFiles,
     });

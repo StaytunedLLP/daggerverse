@@ -9,6 +9,7 @@ export type NodeChecksOptions = {
   verifyChromiumBidi?: boolean;
   registryScope?: string;
   runAffected?: boolean;
+  testScript?: string;
   base?: string;
   changedFiles?: string;
 };
