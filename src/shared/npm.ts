@@ -140,22 +140,32 @@ export function withFullSource(
   const exclude = options.exclude ?? DEFAULT_SOURCE_EXCLUDES;
   const strategy = options.strategy ?? "replace";
 
+  let result = container;
   if (strategy === "replace") {
-    return container.withDirectory(workspace, source, { exclude });
+    result = container.withDirectory(workspace, source, { exclude });
+  } else {
+    // Overlay strategy (merges source into workspace without deleting existing files)
+    const tempPath = "/tmp/dagger-source-overlay";
+    result = container
+      .withDirectory(tempPath, source, { exclude })
+      .withExec([
+        "bash",
+        "-lc",
+        [
+          STRICT_SHELL_HEADER,
+          `tar -C ${tempPath} -cf - . | tar -C ${shellQuote(workspace)} -xf -`,
+          `rm -rf ${tempPath}`,
+        ].join("\n"),
+      ]);
   }
 
-  // Overlay strategy (merges source into workspace without deleting existing files)
-  const tempPath = "/tmp/dagger-source-overlay";
-
-  return container
-    .withDirectory(tempPath, source, { exclude })
-    .withExec([
-      "bash",
-      "-lc",
-      [
-        STRICT_SHELL_HEADER,
-        `tar -C ${tempPath} -cf - . | tar -C ${shellQuote(workspace)} -xf -`,
-        `rm -rf ${tempPath}`,
-      ].join("\n"),
-    ]);
+  return result.withExec([
+    "bash",
+    "-lc",
+    [
+      STRICT_SHELL_HEADER,
+      `cd ${shellQuote(workspace)}`,
+      "test ! -f scripts/postinstall.ts || node scripts/postinstall.ts",
+    ].join("\n"),
+  ]);
 }
