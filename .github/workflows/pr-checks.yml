@@ -20,7 +20,7 @@ jobs:
   pr-checks:
     name: Run PR Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
