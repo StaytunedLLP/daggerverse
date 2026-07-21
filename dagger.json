@@ -1,6 +1,6 @@
 {
   "name": "staydevops-ts",
-  "engineVersion": "v1.0.0-beta.7",
+  "engineVersion": "v0.21.7",
   "sdk": {
     "source": "typescript"
   }
