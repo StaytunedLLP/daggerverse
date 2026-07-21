@@ -65,29 +65,21 @@ export function withNpmAuth(
   const registryScope = options.registryScope ?? DEFAULT_REGISTRY_SCOPE;
   const npmrcPaths = normalizePaths(options.npmrcPaths);
 
-  return container
-    .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
-    .withExec([
-      "bash",
-      "-lc",
-      [
-        STRICT_SHELL_HEADER,
-        "cat > /tmp/staytuned.npmrc <<'EOF'",
-        `@${registryScope}:registry=https://npm.pkg.github.com`,
-        "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
-        "legacy-peer-deps=true",
-        "EOF",
-        `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
-        "  target=\"${path}\"",
-        "  if [ \"${target}\" = \".\" ]; then",
-        `    cp /tmp/staytuned.npmrc ${shellQuote(workspace)}/.npmrc`,
-        "  else",
-        `    mkdir -p ${shellQuote(workspace)}/\"\${target}\"`,
-        `    cp /tmp/staytuned.npmrc ${shellQuote(workspace)}/\"\${target}\"/.npmrc`,
-        "  fi",
-        "done",
-      ].join("\n"),
-    ]);
+  const npmrcContent = [
+    `@${registryScope}:registry=https://npm.pkg.github.com`,
+    "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+    "legacy-peer-deps=true",
+    "",
+  ].join("\n");
+
+  let result = container.withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken);
+  for (const path of npmrcPaths) {
+    const targetPath =
+      path === "." ? `${workspace}/.npmrc` : `${workspace}/${path}/.npmrc`;
+    result = result.withNewFile(targetPath, npmrcContent);
+  }
+
+  return result;
 }
 
 export function withLockfilesOnly(
