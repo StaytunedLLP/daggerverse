@@ -32,6 +32,7 @@
     "@dagger.io/dagger": "^0.20.3"
   },
   "devDependencies": {
+    "@dagger.io/dagger": "^0.20.3",
     "@types/node": "^24.0.0"
   },
   "dependencies": {
