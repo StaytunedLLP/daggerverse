@@ -75,6 +75,7 @@ export function withNpmAuth(
         "cat > /tmp/staytuned.npmrc <<'EOF'",
         `@${registryScope}:registry=https://npm.pkg.github.com`,
         "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
+        "legacy-peer-deps=true",
         "EOF",
         `for path in $(printf '%s' ${JSON.stringify(npmrcPaths.join(","))} | tr ',' ' '); do`,
         "  target=\"${path}\"",
