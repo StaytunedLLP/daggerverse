@@ -186,6 +186,56 @@ export class Checks {
       changedFiles,
     });
   }
+
+  /**
+   * Run full check flow (clean build, format check, lint, and full test suite).
+   *
+   * @param source - Repository source directory to validate.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
+   */
+  @check()
+  @func()
+  async full(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      build: true,
+      format: true,
+      lint: true,
+      test: true,
+    });
+  }
+
+  /**
+   * Run incremental check flow (format, lint, typecheck, and tests only on affected/changed files).
+   *
+   * @param source - Repository source directory to validate.
+   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
+   * @param base - The base git ref to compare against (e.g. 'origin/main').
+   */
+  @check()
+  @func()
+  async incremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+    base = "origin/main",
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      test: true,
+      runAffected: true,
+      testScript: "verify:incremental",
+      base,
+    });
+  }
 }
 
 /**
