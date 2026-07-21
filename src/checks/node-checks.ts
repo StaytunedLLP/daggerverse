@@ -31,28 +31,21 @@ function buildVerifyScript(
 
 function buildRunAffectedTestScript(
   packagePath: string,
-  testScript = "verify:incremental",
   base?: string,
 ): string {
   const baseArg = base ? ` --base=${shellQuote(base)}` : "";
-  const npmBaseArg = base ? ` -- --base=${shellQuote(base)}` : "";
-  const runCmd =
-    testScript === "staytest" || testScript === "staytest:incremental"
-      ? `npx staytest --incremental${baseArg}`
-      : `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['${testScript}'] ? 0 : 1)" 2>/dev/null; then\n  npm run ${testScript}${npmBaseArg}\nelse\n  npx staytest --incremental${baseArg}\nfi`;
-
   return [
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
-    `test -d .git || { echo "Missing git metadata required for incremental testing." >&2; exit 1; }`,
-    `echo "Running native incremental tests with git metadata available."`,
+    `test -d .git || { echo "Missing git metadata required for staytest --incremental." >&2; exit 1; }`,
+    `echo "Running incremental staytest DAG with git metadata available."`,
     "git status --short --branch",
     "if [ -f .staystack/package.json ]; then",
     "  mkdir -p .staystack/node_modules/@staytunedllp",
     "  ln -sfn /workspace .staystack/node_modules/@staytunedllp/staystack",
     "fi",
-    runCmd,
+    `npx staytest --incremental${baseArg}`,
   ].join("\n");
 }
 
@@ -98,7 +91,6 @@ export async function runNodeChecks(
           "-lc",
           buildRunAffectedTestScript(
             packagePath,
-            options.testScript,
             options.base,
           ),
         ]);
