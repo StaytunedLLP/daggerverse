@@ -46,19 +46,24 @@ function buildInstallGlobalCliScript(packagePaths: string[]): string {
   ].join("\n");
 }
 
-function buildRunAffectedTestScript(packagePath: string): string {
+function buildRunAffectedTestScript(
+  packagePath: string,
+  testScript = "test:incremental",
+  base?: string,
+): string {
+  const baseArg = base ? ` -- --base=${shellQuote(base)}` : "";
   return [
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
-    'test -d .git || { echo "Missing git metadata required by npm run test:incremental." >&2; exit 1; }',
-    'echo "Running native incremental tests with git metadata available."',
+    `test -d .git || { echo "Missing git metadata required by npm run ${testScript}." >&2; exit 1; }`,
+    `echo "Running native incremental tests with git metadata available."`,
     "git status --short --branch",
     "if [ -f .staystack/package.json ]; then",
     "  mkdir -p .staystack/node_modules/@staytunedllp",
     "  ln -sfn /workspace .staystack/node_modules/@staytunedllp/staystack",
     "fi",
-    "npm run test:incremental",
+    `npm run ${testScript}${baseArg}`,
   ].join("\n");
 }
 
@@ -110,7 +115,11 @@ export async function runNodeChecks(
         workspace = workspace.withExec([
           "bash",
           "-lc",
-          buildRunAffectedTestScript(packagePath),
+          buildRunAffectedTestScript(
+            packagePath,
+            options.testScript,
+            options.base,
+          ),
         ]);
       } else {
         let testWorkspace = workspace;
