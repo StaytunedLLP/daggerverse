@@ -150,6 +150,19 @@ export class Checks {
     await this.runDefaultCheck(source, "build", nodeAuthToken);
   }
 
+  @check()
+  @func()
+  async typecheck(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await this.runDefaultCheck(source, "build", nodeAuthToken);
+  }
+
   /**
    * Executes the standard repository test suite using the `npm run test` command.
    * Supports incremental execution of affected tests of the changed files via the repository's
