@@ -280,8 +280,8 @@ export class StaydevopsTs {
   /**
    * Pull request validation profile.
    *
-   * Runs PR title validation, formatting, linting, and the repository's
-   * incremental test lane. Repositories using Staystack run
+   * Runs PR title validation and the repository's incremental test lane.
+   * Repositories using Staystack run
    * `staystack staytest run --incremental`.
    */
   @check()
@@ -301,8 +301,8 @@ export class StaydevopsTs {
   /**
    * Main-branch validation profile.
    *
-   * Runs format/lint, a clean build when available, and the incremental
-   * Staystack/staytest lane as the post-merge confidence gate.
+   * Runs a clean build when available and the incremental Staystack/staytest
+   * lane as the post-merge confidence gate.
    */
   @check()
   @func()
@@ -321,8 +321,8 @@ export class StaydevopsTs {
   /**
    * Nightly validation profile.
    *
-   * Runs format/lint, clean build, and the nightly Staystack/staytest lane
-   * with coverage when the repository uses Staystack.
+   * Runs clean build and the nightly Staystack/staytest lane with coverage
+   * when the repository uses Staystack.
    */
   @check()
   @func()

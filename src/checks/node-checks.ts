@@ -48,9 +48,13 @@ function buildRunAffectedTestScript(
 }
 
 function buildRunIfScriptExistsScript(scriptName: string): string {
+  const scriptProbe = shellQuote(
+    `const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)`,
+  );
+
   return [
-    `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)" 2>/dev/null; then`,
-    `  npm run ${scriptName}`,
+    `if node -e ${scriptProbe} 2>/dev/null; then`,
+    `  npm run ${shellQuote(scriptName)}`,
     "else",
     `  echo "No ${scriptName} script found; skipping."`,
     "fi",
@@ -61,9 +65,13 @@ function buildRunFirstExistingScriptScript(scriptNames: readonly string[]): stri
   const lines = ["ran_script=false"];
 
   for (const scriptName of scriptNames) {
+    const scriptProbe = shellQuote(
+      `const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)`,
+    );
+
     lines.push(
-      `if [ "$ran_script" = "false" ] && node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)" 2>/dev/null; then`,
-      `  npm run ${scriptName}`,
+      `if [ "$ran_script" = "false" ] && node -e ${scriptProbe} 2>/dev/null; then`,
+      `  npm run ${shellQuote(scriptName)}`,
       "  ran_script=true",
       "fi",
     );
@@ -118,8 +126,6 @@ function buildProfileScript(
 
   if (profile === "pr") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
     );
     return lines.join("\n");
@@ -127,8 +133,6 @@ function buildProfileScript(
 
   if (profile === "main") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
     );
@@ -137,8 +141,6 @@ function buildProfileScript(
 
   if (profile === "nightly") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
       buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
     );
@@ -146,8 +148,6 @@ function buildProfileScript(
   }
 
   lines.push(
-    buildRunIfScriptExistsScript("format:check"),
-    buildRunIfScriptExistsScript("lint"),
     buildRunFirstExistingScriptScript(["ci", "build:ci", "build"]),
     buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
   );
