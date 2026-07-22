@@ -307,7 +307,6 @@ export class Checks {
     });
   }
 
-  @check()
   @func()
   async full(
     @argument({
@@ -325,7 +324,6 @@ export class Checks {
     ]);
   }
 
-  @check()
   @func()
   async incremental(
     @argument({
@@ -384,7 +382,6 @@ export class StaydevopsTs {
    * Repositories using Staystack run
    * `staystack staytest run --incremental`.
    */
-  @check()
   @func()
   async pr(
     @argument({
@@ -404,7 +401,6 @@ export class StaydevopsTs {
    * Runs a clean build when available and the incremental Staystack/staytest
    * lane as the post-merge confidence gate.
    */
-  @check()
   @func()
   async main(
     @argument({
@@ -424,7 +420,6 @@ export class StaydevopsTs {
    * Runs clean build and the nightly Staystack/staytest lane with coverage
    * when the repository uses Staystack.
    */
-  @check()
   @func()
   async nightly(
     @argument({
@@ -443,7 +438,6 @@ export class StaydevopsTs {
    * Runs the strongest available package CI command plus nightly Staystack
    * verification when available.
    */
-  @check()
   @func()
   async full(
     @argument({
