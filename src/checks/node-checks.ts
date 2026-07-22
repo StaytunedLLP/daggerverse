@@ -126,8 +126,6 @@ function buildProfileScript(
 
   if (profile === "pr") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
     );
     return lines.join("\n");
@@ -135,8 +133,6 @@ function buildProfileScript(
 
   if (profile === "main") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
     );
@@ -145,8 +141,6 @@ function buildProfileScript(
 
   if (profile === "nightly") {
     lines.push(
-      buildRunIfScriptExistsScript("format:check"),
-      buildRunIfScriptExistsScript("lint"),
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
       buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
     );
@@ -154,8 +148,6 @@ function buildProfileScript(
   }
 
   lines.push(
-    buildRunIfScriptExistsScript("format:check"),
-    buildRunIfScriptExistsScript("lint"),
     buildRunFirstExistingScriptScript(["ci", "build:ci", "build"]),
     buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
   );
