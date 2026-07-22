@@ -48,9 +48,13 @@ function buildRunAffectedTestScript(
 }
 
 function buildRunIfScriptExistsScript(scriptName: string): string {
+  const scriptProbe = shellQuote(
+    `const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)`,
+  );
+
   return [
-    `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)" 2>/dev/null; then`,
-    `  npm run ${scriptName}`,
+    `if node -e ${scriptProbe} 2>/dev/null; then`,
+    `  npm run ${shellQuote(scriptName)}`,
     "else",
     `  echo "No ${scriptName} script found; skipping."`,
     "fi",
@@ -61,9 +65,13 @@ function buildRunFirstExistingScriptScript(scriptNames: readonly string[]): stri
   const lines = ["ran_script=false"];
 
   for (const scriptName of scriptNames) {
+    const scriptProbe = shellQuote(
+      `const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)`,
+    );
+
     lines.push(
-      `if [ "$ran_script" = "false" ] && node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)" 2>/dev/null; then`,
-      `  npm run ${scriptName}`,
+      `if [ "$ran_script" = "false" ] && node -e ${scriptProbe} 2>/dev/null; then`,
+      `  npm run ${shellQuote(scriptName)}`,
       "  ran_script=true",
       "fi",
     );
