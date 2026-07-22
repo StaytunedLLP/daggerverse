@@ -293,8 +293,9 @@ export class StaydevopsTs {
     })
     source: Directory,
     base = "origin/main",
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runProfile("pr", source, base);
+    await this.runProfile("pr", source, base, nodeAuthToken);
   }
 
   /**
@@ -312,8 +313,9 @@ export class StaydevopsTs {
     })
     source: Directory,
     base = "origin/main",
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runProfile("main", source, base);
+    await this.runProfile("main", source, base, nodeAuthToken);
   }
 
   /**
@@ -330,8 +332,9 @@ export class StaydevopsTs {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runProfile("nightly", source);
+    await this.runProfile("nightly", source, "origin/main", nodeAuthToken);
   }
 
   /**
@@ -348,8 +351,9 @@ export class StaydevopsTs {
       ignore: [".git", "dagger", "dist", "node_modules"],
     })
     source: Directory,
+    nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runProfile("full", source);
+    await this.runProfile("full", source, "origin/main", nodeAuthToken);
   }
 
   /**
@@ -368,6 +372,7 @@ export class StaydevopsTs {
     })
     source: Directory,
     base = "origin/main",
+    nodeAuthToken?: Secret,
   ): Promise<void> {
     if (
       checkProfile !== "pr" &&
@@ -384,7 +389,7 @@ export class StaydevopsTs {
       await checkPrTitleFromEvent();
     }
 
-    await runNodeChecks(source, undefined, {
+    await runNodeChecks(source, nodeAuthToken, {
       profile: checkProfile,
       base,
     });
