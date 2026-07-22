@@ -91,6 +91,7 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
       format: true,
@@ -173,6 +174,7 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    base = "origin/main",
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
       lint: true,
