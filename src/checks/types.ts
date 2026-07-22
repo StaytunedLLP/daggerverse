@@ -6,6 +6,7 @@ export type NodeChecksOptions = {
   test?: boolean;
   lint?: boolean;
   format?: boolean;
+  profile?: "pr" | "main" | "nightly" | "full";
   verifyChromiumBidi?: boolean;
   registryScope?: string;
   runAffected?: boolean;

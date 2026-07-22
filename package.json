@@ -33,10 +33,10 @@
     "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
-    "@dagger.io/dagger": "^0.20.3"
+    "@dagger.io/dagger": "^0.21.7"
   },
   "devDependencies": {
-    "@dagger.io/dagger": "^0.20.3",
+    "@dagger.io/dagger": "^0.21.7",
     "@types/node": "^24.0.0"
   },
   "dependencies": {
