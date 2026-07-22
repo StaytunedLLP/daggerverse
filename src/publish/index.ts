@@ -257,7 +257,7 @@ async function publishRelease(
   });
   container = withInstalledDependencies(container, packagePath, {
     workspace: DEFAULT_WORKSPACE,
-    npmCiArgs: ["--workspaces=false"],
+    npmCiArgs: ["--workspaces=false", "--legacy-peer-deps"],
   });
   // Reapply npm auth after copying the full source in case the repository ships its own .npmrc.
   container = withFullSource(container, options.source, {
