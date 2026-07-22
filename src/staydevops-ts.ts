@@ -110,6 +110,22 @@ export class Checks {
     });
   }
 
+  @check()
+  @func()
+  async formatIncremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      runAffected: true,
+    });
+  }
+
   /**
    * Executes the repository linter using the standard `npm run lint` command.
    *
@@ -134,6 +150,22 @@ export class Checks {
     await runNodeChecks(source, nodeAuthToken, {
       lint: true,
       runAffected,
+    });
+  }
+
+  @check()
+  @func()
+  async lintIncremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      lint: true,
+      runAffected: true,
     });
   }
 
@@ -252,6 +284,8 @@ export class Checks {
     base = "origin/main",
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      lint: true,
       test: true,
       runAffected: true,
       testScript: "verify:incremental",
