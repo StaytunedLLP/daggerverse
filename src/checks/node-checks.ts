@@ -111,57 +111,6 @@ function buildStaytestOrFallbackScript(
   ].join("\n");
 }
 
-function buildProfileScript(
-  packagePath: string,
-  profile: NonNullable<NodeChecksOptions["profile"]>,
-  base?: string,
-): string {
-  const cwd = resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath);
-  const lines = [
-    STRICT_SHELL_HEADER,
-    `cd ${shellQuote(cwd)}`,
-    `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
-    `echo "Running Dagger ${profile} profile in ${shellQuote(packagePath)}."`,
-  ];
-
-  if (profile === "pr") {
-    lines.push(
-      buildStaytestOrFallbackScript(packagePath, "incremental", base),
-      buildRunFirstExistingScriptScript(["lint:incremental", "lint"]),
-      buildRunFirstExistingScriptScript(["format:incremental", "format:check", "format"]),
-    );
-    return lines.join("\n");
-  }
-
-  if (profile === "main") {
-    lines.push(
-      buildRunFirstExistingScriptScript(["build:ci", "build"]),
-      buildRunFirstExistingScriptScript(["lint"]),
-      buildRunFirstExistingScriptScript(["format:check", "format"]),
-      buildStaytestOrFallbackScript(packagePath, "incremental", base),
-    );
-    return lines.join("\n");
-  }
-
-  if (profile === "nightly") {
-    lines.push(
-      buildRunFirstExistingScriptScript(["build:ci", "build"]),
-      buildRunFirstExistingScriptScript(["lint"]),
-      buildRunFirstExistingScriptScript(["format:check", "format"]),
-      buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
-    );
-    return lines.join("\n");
-  }
-
-  lines.push(
-    buildRunFirstExistingScriptScript(["ci", "build:ci", "build"]),
-    buildRunFirstExistingScriptScript(["lint"]),
-    buildRunFirstExistingScriptScript(["format:check", "format"]),
-    buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
-  );
-  return lines.join("\n");
-}
-
 export async function runNodeChecks(
   source: Directory,
   nodeAuthToken?: Secret,
@@ -182,8 +131,7 @@ export async function runNodeChecks(
     ]);
   }
 
-  const needsGitMetadata =
-    options.runAffected || options.profile === "pr" || options.profile === "main";
+  const needsGitMetadata = Boolean(options.runAffected);
 
   let workspace = withFullSource(installed, source, {
     exclude: needsGitMetadata
@@ -192,14 +140,6 @@ export async function runNodeChecks(
   });
 
   for (const packagePath of packagePaths) {
-    if (options.profile) {
-      workspace = workspace.withExec([
-        "bash",
-        "-lc",
-        buildProfileScript(packagePath, options.profile, options.base),
-      ]);
-      continue;
-    }
 
     if (options.format) {
       if (options.runAffected) {
