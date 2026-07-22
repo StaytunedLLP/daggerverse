@@ -23,15 +23,15 @@ Treat this section as the highest-priority implementation policy for this reposi
 
 ### CI Runner for Dagger
 
-Any GitHub Actions job that invokes Dagger must:
+GitHub Actions jobs invoking Dagger must:
 
-1. set `runs-on: shr`
+1. set `runs-on: ubuntu-latest` for public repositories like `daggerverse` (or `runs-on: shr` when executing on internal ARC infrastructure for private repositories).
 2. run Dagger CLI commands directly using standard shell execution:
 
 ```yaml
 jobs:
   job_name:
-    runs-on: shr
+    runs-on: ubuntu-latest
 
     steps:
       - name: Run Dagger Call
