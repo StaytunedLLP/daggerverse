@@ -34,14 +34,14 @@ function buildRunAffectedTestScript(
   base?: string,
 ): string {
   const baseArg = base ? ` --base=${shellQuote(base)}` : "";
-  const runCmd = `if node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then\n  npx staystack staytest run --incremental${baseArg}\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['verify:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run verify:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run test:incremental\nelse\n  echo "Missing incremental test script (verify:incremental or test:incremental) in package.json" >&2\n  exit 1\nfi`;
+  const runCmd = `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['verify:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run verify:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run test:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then\n  npx staystack staytest run --incremental${baseArg}\nelse\n  echo "Missing incremental test script (verify:incremental or test:incremental) in package.json" >&2\n  exit 1\nfi`;
 
   return [
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
     `test -d .git || { echo "Missing git metadata required for incremental testing." >&2; exit 1; }`,
-    `echo "Running incremental staytest DAG with git metadata available."`,
+    `echo "Running incremental test lane with git metadata available."`,
     "git status --short --branch",
     runCmd,
   ].join("\n");
