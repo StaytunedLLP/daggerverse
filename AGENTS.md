@@ -45,8 +45,12 @@ jobs:
    - Never use imported constants directly inside decorator metadata.
    - Inline decorator values (e.g., `@argument({ ignore: [".git", "dist"] })`) to avoid introspection instability.
 
-2. **Check visibility (mandatory)**
-   - Public validation checks should include both `@check()` and `@func()`.
+2. **Check visibility & Regex Execution Rules (mandatory)**
+   - Atomic validation check functions (`buildFull`, `buildIncremental`, `formatFull`, `formatIncremental`, `lintFull`, `lintIncremental`, `testFull`, `testIncremental`) must include both `@check()` and `@func()`.
+   - Composite or aggregate profile functions (`pr`, `main`, `nightly`, `full`, `incremental`) must include `@func()` ONLY (omit `@check()`) to prevent redundant duplicate pipeline executions when invoking `dagger check [pattern]`.
+   - Use regex pattern filtering when invoking `dagger check` in CI workflows:
+     - Incremental validation (`pr` / `main`): `dagger check -m <module> ".*incremental.*"`
+     - Full validation (`full` / `nightly`): `dagger check -m <module> ".*full.*"`
 
 3. **TSDoc for public API (mandatory)**
    - Public module members must be documented.
