@@ -22,6 +22,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:ci": "npm run build",
+    "build:incremental": "npm run build",
     "clean": "rm -rf dist",
     "lint": "echo 'No lint check required for daggerverse'",
     "lint:incremental": "echo 'No incremental lint check required for daggerverse'",
