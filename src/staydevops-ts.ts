@@ -26,8 +26,6 @@ import {
 import { releasePackage } from "#publish/index.js";
 import { runPlaywrightTests } from "#playwright/index.js";
 
-type CheckMode = "format" | "lint" | "build" | "test";
-
 /**
  * Collection of repository checks and validation tools for Node.js projects.
  *
@@ -37,15 +35,6 @@ type CheckMode = "format" | "lint" | "build" | "test";
  */
 @object()
 export class Checks {
-  private async runDefaultCheck(
-    source: Directory,
-    mode: CheckMode,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
-      [mode]: true,
-    });
-  }
 
   /**
    * Fully prepares a Node.js workspace environment by:
@@ -102,6 +91,7 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
       format: true,
@@ -184,6 +174,7 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    base = "origin/main",
   ): Promise<void> {
     await runNodeChecks(source, nodeAuthToken, {
       lint: true,
@@ -306,40 +297,6 @@ export class Checks {
       base,
     });
   }
-
-  @func()
-  async full(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await Promise.all([
-      this.buildFull(source, nodeAuthToken),
-      this.formatFull(source, nodeAuthToken),
-      this.lintFull(source, nodeAuthToken),
-      this.testFull(source, nodeAuthToken),
-    ]);
-  }
-
-  @func()
-  async incremental(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-    base = "origin/main",
-  ): Promise<void> {
-    await Promise.all([
-      this.formatIncremental(source, nodeAuthToken),
-      this.lintIncremental(source, nodeAuthToken),
-      this.testIncremental(source, nodeAuthToken, base),
-    ]);
-  }
 }
 
 /**
@@ -373,120 +330,6 @@ export class StaydevopsTs {
   @func()
   async checkPrTitle(eventFile?: File, githubToken?: Secret): Promise<void> {
     await checkPrTitleFromEvent(eventFile, githubToken);
-  }
-
-  /**
-   * Pull request validation profile.
-   *
-   * Runs PR title validation and the repository's incremental test lane.
-   * Repositories using Staystack run
-   * `staystack staytest run --incremental`.
-   */
-  @func()
-  async pr(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    base = "origin/main",
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runProfile("pr", source, base, nodeAuthToken);
-  }
-
-  /**
-   * Main-branch validation profile.
-   *
-   * Runs a clean build when available and the incremental Staystack/staytest
-   * lane as the post-merge confidence gate.
-   */
-  @func()
-  async main(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    base = "origin/main",
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runProfile("main", source, base, nodeAuthToken);
-  }
-
-  /**
-   * Nightly validation profile.
-   *
-   * Runs clean build and the nightly Staystack/staytest lane with coverage
-   * when the repository uses Staystack.
-   */
-  @func()
-  async nightly(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runProfile("nightly", source, "origin/main", nodeAuthToken);
-  }
-
-  /**
-   * Manual full validation profile.
-   *
-   * Runs the strongest available package CI command plus nightly Staystack
-   * verification when available.
-   */
-  @func()
-  async full(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await this.runProfile("full", source, "origin/main", nodeAuthToken);
-  }
-
-  /**
-   * Run one named CI profile against an explicit source directory.
-   *
-   * Reusable GitHub workflows should use this function instead of `dagger check`
-   * when the Dagger module is loaded from another repository, because `source=.`
-   * must point at the caller repository rather than the module repository.
-   */
-  @func()
-  async runProfile(
-    checkProfile: string,
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    base = "origin/main",
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    if (
-      checkProfile !== "pr" &&
-      checkProfile !== "main" &&
-      checkProfile !== "nightly" &&
-      checkProfile !== "full"
-    ) {
-      throw new Error(
-        `Unsupported check profile "${checkProfile}". Expected pr, main, nightly, or full.`,
-      );
-    }
-
-    if (checkProfile === "pr") {
-      await checkPrTitleFromEvent();
-    }
-
-    await runNodeChecks(source, nodeAuthToken, {
-      profile: checkProfile,
-      base,
-    });
   }
 
   /**

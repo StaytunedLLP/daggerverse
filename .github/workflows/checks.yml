@@ -48,23 +48,21 @@ jobs:
           curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v0.21.7" BIN_DIR="$INSTALL_DIR" sh
           echo "$INSTALL_DIR" >> "$GITHUB_PATH"
 
-      - name: Resolve check profile
-        id: profile
+      - name: Resolve check pattern
+        id: pattern
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            profile="pr"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            profile="main"
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "push" ]; then
+            pattern="checks:*-incremental"
           else
-            profile="${{ inputs.profile }}"
+            pattern="checks:*-full"
           fi
-          echo "profile=${profile}" >> "$GITHUB_OUTPUT"
+          echo "pattern=${pattern}" >> "$GITHUB_OUTPUT"
 
       - name: Run Dagger checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN != '' && secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dagger check -m . "staydevops-ts:${{ steps.profile.outputs.profile }}"
+        run: dagger check -m . "${{ steps.pattern.outputs.pattern }}"
 
