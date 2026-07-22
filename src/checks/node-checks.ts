@@ -1,17 +1,17 @@
-import { Directory, Secret } from "@dagger.io/dagger";
 import {
-  DEFAULT_SOURCE_EXCLUDES,
-  DEFAULT_WORKSPACE,
-  STRICT_SHELL_HEADER,
-  createNodeWorkspace,
-  runNpmScript,
-  withFullSource,
+    DEFAULT_SOURCE_EXCLUDES,
+    DEFAULT_WORKSPACE,
+    STRICT_SHELL_HEADER,
+    createNodeWorkspace,
+    runNpmScript,
+    withFullSource,
 } from "#shared/index.js";
 import {
-  normalizePaths,
-  resolveWorkspacePath,
-  shellQuote,
+    normalizePaths,
+    resolveWorkspacePath,
+    shellQuote,
 } from "#shared/path-utils.js";
+import { Directory, Secret } from "@dagger.io/dagger";
 import type { NodeChecksOptions } from "./types.js";
 
 function buildVerifyScript(
@@ -127,6 +127,8 @@ function buildProfileScript(
   if (profile === "pr") {
     lines.push(
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
+      buildRunFirstExistingScriptScript(["lint:incremental", "lint"]),
+      buildRunFirstExistingScriptScript(["format:incremental", "format:check", "format"]),
     );
     return lines.join("\n");
   }
@@ -134,6 +136,8 @@ function buildProfileScript(
   if (profile === "main") {
     lines.push(
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
+      buildRunFirstExistingScriptScript(["lint"]),
+      buildRunFirstExistingScriptScript(["format:check", "format"]),
       buildStaytestOrFallbackScript(packagePath, "incremental", base),
     );
     return lines.join("\n");
@@ -142,6 +146,8 @@ function buildProfileScript(
   if (profile === "nightly") {
     lines.push(
       buildRunFirstExistingScriptScript(["build:ci", "build"]),
+      buildRunFirstExistingScriptScript(["lint"]),
+      buildRunFirstExistingScriptScript(["format:check", "format"]),
       buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
     );
     return lines.join("\n");
@@ -149,6 +155,8 @@ function buildProfileScript(
 
   lines.push(
     buildRunFirstExistingScriptScript(["ci", "build:ci", "build"]),
+    buildRunFirstExistingScriptScript(["lint"]),
+    buildRunFirstExistingScriptScript(["format:check", "format"]),
     buildStaytestOrFallbackScript(packagePath, "nightly", base, true),
   );
   return lines.join("\n");
@@ -194,11 +202,35 @@ export async function runNodeChecks(
     }
 
     if (options.format) {
-      workspace = runNpmScript(workspace, "format:check", { cwd: packagePath });
+      if (options.runAffected) {
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            buildRunFirstExistingScriptScript(["format:incremental", "format:check", "format"]),
+          ].join("\n"),
+        ]);
+      } else {
+        workspace = runNpmScript(workspace, "format:check", { cwd: packagePath });
+      }
     }
 
     if (options.lint) {
-      workspace = runNpmScript(workspace, "lint", { cwd: packagePath });
+      if (options.runAffected) {
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            buildRunFirstExistingScriptScript(["lint:incremental", "lint"]),
+          ].join("\n"),
+        ]);
+      } else {
+        workspace = runNpmScript(workspace, "lint", { cwd: packagePath });
+      }
     }
 
     if (options.test) {
