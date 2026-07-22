@@ -93,6 +93,23 @@ export class Checks {
    * @example
    * dagger call checks format --source .
    */
+  @check()
+  @func()
+  async formatFull(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      runAffected: false,
+    });
+  }
+
+  @check()
   @func()
   async format(
     @argument({
@@ -101,19 +118,47 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "format", nodeAuthToken);
+    await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      runAffected,
+    });
   }
 
-  /**
-   * Executes the repository linter using the standard `npm run lint` command.
-   *
-   * @param source - Repository source directory to lint.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
-   * @example
-   * dagger call checks lint --source .
-   */
+  @check()
+  @func()
+  async formatIncremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      runAffected: true,
+    });
+  }
+
+  @check()
+  @func()
+  async lintFull(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      lint: true,
+      runAffected: false,
+    });
+  }
+
+  @check()
   @func()
   async lint(
     @argument({
@@ -122,19 +167,47 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "lint", nodeAuthToken);
+    await runNodeChecks(source, nodeAuthToken, {
+      lint: true,
+      runAffected,
+    });
   }
 
-  /**
-   * Verifies that the repository builds successfully using the `npm run build` command.
-   *
-   * @param source - Repository source directory to build.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   *
-   * @example
-   * dagger call checks build --source .
-   */
+  @check()
+  @func()
+  async lintIncremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      lint: true,
+      runAffected: true,
+    });
+  }
+
+  @check()
+  @func()
+  async buildFull(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      build: true,
+      runAffected: false,
+    });
+  }
+
+  @check()
   @func()
   async build(
     @argument({
@@ -144,9 +217,26 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "build", nodeAuthToken);
+    await this.buildFull(source, nodeAuthToken);
   }
 
+  @check()
+  @func()
+  async buildIncremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      build: true,
+      runAffected: true,
+    });
+  }
+
+  @check()
   @func()
   async typecheck(
     @argument({
@@ -156,23 +246,26 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "build", nodeAuthToken);
+    await this.buildFull(source, nodeAuthToken);
   }
 
-  /**
-   * Executes the standard repository test suite using the `npm run test` command.
-   * Supports incremental execution of affected tests of the changed files via the repository's
-   * `npm run test:incremental` script when `runAffected` is enabled.
-   *
-   * @param source - Repository source directory to test.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
-   * @param runAffected - Run the repository's incremental test script instead of the full test suite.
-   * @param base - Retained for compatibility with older workflows.
-   * @param changedFiles - Retained for compatibility with older workflows.
-   *
-   * @example
-   * dagger call checks test --source . --run-affected
-   */
+  @check()
+  @func()
+  async testFull(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await runNodeChecks(source, nodeAuthToken, {
+      test: true,
+      runAffected: false,
+    });
+  }
+
+  @check()
   @func()
   async test(
     @argument({
@@ -195,38 +288,9 @@ export class Checks {
     });
   }
 
-  /**
-   * Run full check flow (clean build, format check, lint, and full test suite).
-   *
-   * @param source - Repository source directory to validate.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
-   */
+  @check()
   @func()
-  async full(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
-      build: true,
-      format: true,
-      lint: true,
-      test: true,
-    });
-  }
-
-  /**
-   * Run incremental check flow (format, lint, typecheck, and tests only on affected/changed files).
-   *
-   * @param source - Repository source directory to validate.
-   * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
-   * @param base - The base git ref to compare against (e.g. 'origin/main').
-   */
-  @func()
-  async incremental(
+  async testIncremental(
     @argument({
       defaultPath: ".",
       ignore: ["dagger", "dist", "node_modules"],
@@ -241,6 +305,42 @@ export class Checks {
       testScript: "verify:incremental",
       base,
     });
+  }
+
+  @check()
+  @func()
+  async full(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+  ): Promise<void> {
+    await Promise.all([
+      this.buildFull(source, nodeAuthToken),
+      this.formatFull(source, nodeAuthToken),
+      this.lintFull(source, nodeAuthToken),
+      this.testFull(source, nodeAuthToken),
+    ]);
+  }
+
+  @check()
+  @func()
+  async incremental(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    nodeAuthToken?: Secret,
+    base = "origin/main",
+  ): Promise<void> {
+    await Promise.all([
+      this.formatIncremental(source, nodeAuthToken),
+      this.lintIncremental(source, nodeAuthToken),
+      this.testIncremental(source, nodeAuthToken, base),
+    ]);
   }
 }
 
