@@ -43,10 +43,6 @@ function buildRunAffectedTestScript(
     `test -d .git || { echo "Missing git metadata required for incremental testing." >&2; exit 1; }`,
     `echo "Running incremental staytest DAG with git metadata available."`,
     "git status --short --branch",
-    "if [ -f .staystack/package.json ]; then",
-    "  mkdir -p .staystack/node_modules/@staytunedllp",
-    "  ln -sfn /workspace .staystack/node_modules/@staytunedllp/staystack",
-    "fi",
     runCmd,
   ].join("\n");
 }
