@@ -102,8 +102,12 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "format", nodeAuthToken);
+    await runNodeChecks(source, nodeAuthToken, {
+      format: true,
+      runAffected,
+    });
   }
 
   /**
@@ -111,6 +115,7 @@ export class Checks {
    *
    * @param source - Repository source directory to lint.
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication. Required for private packages.
+   * @param runAffected - Enable to run incremental linting on affected files when available.
    *
    * @example
    * dagger call checks lint --source .
@@ -124,8 +129,12 @@ export class Checks {
     })
     source: Directory,
     nodeAuthToken?: Secret,
+    runAffected = false,
   ): Promise<void> {
-    await this.runDefaultCheck(source, "lint", nodeAuthToken);
+    await runNodeChecks(source, nodeAuthToken, {
+      lint: true,
+      runAffected,
+    });
   }
 
   /**
