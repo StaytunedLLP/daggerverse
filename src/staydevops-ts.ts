@@ -93,6 +93,7 @@ export class Checks {
    * @example
    * dagger call checks format --source .
    */
+  @check()
   @func()
   async format(
     @argument({
@@ -114,6 +115,7 @@ export class Checks {
    * @example
    * dagger call checks lint --source .
    */
+  @check()
   @func()
   async lint(
     @argument({
@@ -135,6 +137,7 @@ export class Checks {
    * @example
    * dagger call checks build --source .
    */
+  @check()
   @func()
   async build(
     @argument({
@@ -147,6 +150,7 @@ export class Checks {
     await this.runDefaultCheck(source, "build", nodeAuthToken);
   }
 
+  @check()
   @func()
   async typecheck(
     @argument({
@@ -173,6 +177,7 @@ export class Checks {
    * @example
    * dagger call checks test --source . --run-affected
    */
+  @check()
   @func()
   async test(
     @argument({
@@ -201,6 +206,7 @@ export class Checks {
    * @param source - Repository source directory to validate.
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    */
+  @check()
   @func()
   async full(
     @argument({
@@ -225,6 +231,7 @@ export class Checks {
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    * @param base - The base git ref to compare against (e.g. 'origin/main').
    */
+  @check()
   @func()
   async incremental(
     @argument({
