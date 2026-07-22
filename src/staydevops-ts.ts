@@ -26,8 +26,6 @@ import {
 import { releasePackage } from "#publish/index.js";
 import { runPlaywrightTests } from "#playwright/index.js";
 
-type CheckMode = "format" | "lint" | "build" | "test";
-
 /**
  * Collection of repository checks and validation tools for Node.js projects.
  *
@@ -37,15 +35,6 @@ type CheckMode = "format" | "lint" | "build" | "test";
  */
 @object()
 export class Checks {
-  private async runDefaultCheck(
-    source: Directory,
-    mode: CheckMode,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
-      [mode]: true,
-    });
-  }
 
   /**
    * Fully prepares a Node.js workspace environment by:
