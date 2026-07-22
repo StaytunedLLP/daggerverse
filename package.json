@@ -24,7 +24,10 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "echo 'No lint check required for daggerverse'",
+    "lint:incremental": "echo 'No incremental lint check required for daggerverse'",
+    "format": "echo 'No format write required for daggerverse'",
     "format:check": "echo 'No format check required for daggerverse'",
+    "format:incremental": "echo 'No incremental format check required for daggerverse'",
     "test": "echo 'No tests defined for daggerverse'",
     "verify:incremental": "npm run build",
     "prepublishOnly": "npm run clean && npm run build"
