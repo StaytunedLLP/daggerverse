@@ -1,0 +1,70 @@
+name: Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Dagger check profile to run.
+        required: false
+        default: full
+        type: choice
+        options:
+          - pr
+          - main
+          - nightly
+          - full
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: read
+
+jobs:
+  checks:
+    name: Dagger Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Dagger CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$HOME/.local/bin"
+          mkdir -p "$INSTALL_DIR"
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v0.21.7" BIN_DIR="$INSTALL_DIR" sh
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+      - name: Resolve check profile
+        id: profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            profile="pr"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            profile="main"
+          else
+            profile="${{ inputs.profile }}"
+          fi
+          echo "profile=${profile}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Dagger checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN != '' && secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dagger check -m . "staydevops-ts:${{ steps.profile.outputs.profile }}"
+

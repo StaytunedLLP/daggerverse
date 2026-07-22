@@ -93,7 +93,6 @@ export class Checks {
    * @example
    * dagger call checks format --source .
    */
-  @check()
   @func()
   async format(
     @argument({
@@ -115,7 +114,6 @@ export class Checks {
    * @example
    * dagger call checks lint --source .
    */
-  @check()
   @func()
   async lint(
     @argument({
@@ -137,7 +135,6 @@ export class Checks {
    * @example
    * dagger call checks build --source .
    */
-  @check()
   @func()
   async build(
     @argument({
@@ -150,7 +147,6 @@ export class Checks {
     await this.runDefaultCheck(source, "build", nodeAuthToken);
   }
 
-  @check()
   @func()
   async typecheck(
     @argument({
@@ -177,7 +173,6 @@ export class Checks {
    * @example
    * dagger call checks test --source . --run-affected
    */
-  @check()
   @func()
   async test(
     @argument({
@@ -206,7 +201,6 @@ export class Checks {
    * @param source - Repository source directory to validate.
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    */
-  @check()
   @func()
   async full(
     @argument({
@@ -231,7 +225,6 @@ export class Checks {
    * @param nodeAuthToken - Optional secret token for GitHub Packages npm authentication.
    * @param base - The base git ref to compare against (e.g. 'origin/main').
    */
-  @check()
   @func()
   async incremental(
     @argument({
@@ -279,10 +272,122 @@ export class StaydevopsTs {
    * @example
    * dagger call check-pr-title --event-file=$GITHUB_EVENT_PATH --github-token=env:GITHUB_TOKEN
    */
-  @check()
   @func()
   async checkPrTitle(eventFile?: File, githubToken?: Secret): Promise<void> {
     await checkPrTitleFromEvent(eventFile, githubToken);
+  }
+
+  /**
+   * Pull request validation profile.
+   *
+   * Runs PR title validation, formatting, linting, and the repository's
+   * incremental test lane. Repositories using Staystack run
+   * `staystack staytest run --incremental`.
+   */
+  @check()
+  @func()
+  async pr(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    base = "origin/main",
+  ): Promise<void> {
+    await this.runProfile("pr", source, base);
+  }
+
+  /**
+   * Main-branch validation profile.
+   *
+   * Runs format/lint, a clean build when available, and the incremental
+   * Staystack/staytest lane as the post-merge confidence gate.
+   */
+  @check()
+  @func()
+  async main(
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    base = "origin/main",
+  ): Promise<void> {
+    await this.runProfile("main", source, base);
+  }
+
+  /**
+   * Nightly validation profile.
+   *
+   * Runs format/lint, clean build, and the nightly Staystack/staytest lane
+   * with coverage when the repository uses Staystack.
+   */
+  @check()
+  @func()
+  async nightly(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runProfile("nightly", source);
+  }
+
+  /**
+   * Manual full validation profile.
+   *
+   * Runs the strongest available package CI command plus nightly Staystack
+   * verification when available.
+   */
+  @check()
+  @func()
+  async full(
+    @argument({
+      defaultPath: ".",
+      ignore: [".git", "dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+  ): Promise<void> {
+    await this.runProfile("full", source);
+  }
+
+  /**
+   * Run one named CI profile against an explicit source directory.
+   *
+   * Reusable GitHub workflows should use this function instead of `dagger check`
+   * when the Dagger module is loaded from another repository, because `source=.`
+   * must point at the caller repository rather than the module repository.
+   */
+  @func()
+  async runProfile(
+    checkProfile: string,
+    @argument({
+      defaultPath: ".",
+      ignore: ["dagger", "dist", "node_modules"],
+    })
+    source: Directory,
+    base = "origin/main",
+  ): Promise<void> {
+    if (
+      checkProfile !== "pr" &&
+      checkProfile !== "main" &&
+      checkProfile !== "nightly" &&
+      checkProfile !== "full"
+    ) {
+      throw new Error(
+        `Unsupported check profile "${checkProfile}". Expected pr, main, nightly, or full.`,
+      );
+    }
+
+    if (checkProfile === "pr") {
+      await checkPrTitleFromEvent();
+    }
+
+    await runNodeChecks(source, undefined, {
+      profile: checkProfile,
+      base,
+    });
   }
 
   /**

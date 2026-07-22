@@ -72,7 +72,9 @@ export function withNpmAuth(
     "",
   ].join("\n");
 
-  let result = container.withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken);
+  let result = container
+    .withSecretVariable("NODE_AUTH_TOKEN", nodeAuthToken)
+    .withEnvVariable("NPM_CONFIG_LEGACY_PEER_DEPS", "true");
   for (const path of npmrcPaths) {
     const targetPath =
       path === "." ? `${workspace}/.npmrc` : `${workspace}/${path}/.npmrc`;

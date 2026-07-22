@@ -35,6 +35,6 @@ export function createNodeWorkspace(
 
   return withInstalledDependencies(container, options.packagePaths ?? ".", {
     workspace: options.workspace,
-    npmCiArgs: options.npmCiArgs,
+    npmCiArgs: options.npmCiArgs ?? ["--legacy-peer-deps"],
   });
 }
