@@ -18,7 +18,8 @@ export function createBaseNodeContainer(
     .container()
     .from(options.image ?? DEFAULT_IMAGE)
     .withWorkdir(workspace)
-    .withEnvVariable("HUSKY", "0");
+    .withEnvVariable("HUSKY", "0")
+    .withEnvVariable("NODE_OPTIONS", "--max-old-space-size=4096");
 }
 
 export function withMountedCache(
