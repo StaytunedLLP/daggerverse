@@ -21,7 +21,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "npx -p typescript@7.0.2 tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "echo 'No lint check required for daggerverse'",
     "format:check": "echo 'No format check required for daggerverse'",
