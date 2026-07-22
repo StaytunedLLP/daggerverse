@@ -173,9 +173,33 @@ export async function runNodeChecks(
 
     if (options.build) {
       if (options.runAffected) {
-        workspace = runNpmScript(workspace, "build:incremental", { cwd: packagePath });
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['build:incremental'] ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run build:incremental`,
+            `else`,
+            `  npm run build`,
+            `fi`,
+          ].join("\n"),
+        ]);
       } else {
-        workspace = runNpmScript(workspace, "build:ci", { cwd: packagePath });
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['build:ci'] ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run build:ci`,
+            `else`,
+            `  npm run build`,
+            `fi`,
+          ].join("\n"),
+        ]);
       }
     }
   }
