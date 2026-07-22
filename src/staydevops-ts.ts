@@ -257,12 +257,12 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
-      build: true,
-      format: true,
-      lint: true,
-      test: true,
-    });
+    await Promise.all([
+      runNodeChecks(source, nodeAuthToken, { build: true }),
+      runNodeChecks(source, nodeAuthToken, { format: true }),
+      runNodeChecks(source, nodeAuthToken, { lint: true }),
+      runNodeChecks(source, nodeAuthToken, { test: true }),
+    ]);
   }
 
   /**
@@ -283,14 +283,16 @@ export class Checks {
     nodeAuthToken?: Secret,
     base = "origin/main",
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
-      format: true,
-      lint: true,
-      test: true,
-      runAffected: true,
-      testScript: "verify:incremental",
-      base,
-    });
+    await Promise.all([
+      runNodeChecks(source, nodeAuthToken, { format: true, runAffected: true }),
+      runNodeChecks(source, nodeAuthToken, { lint: true, runAffected: true }),
+      runNodeChecks(source, nodeAuthToken, {
+        test: true,
+        runAffected: true,
+        testScript: "verify:incremental",
+        base,
+      }),
+    ]);
   }
 }
 
