@@ -34,7 +34,7 @@ function buildRunAffectedTestScript(
   base?: string,
 ): string {
   const baseArg = base ? ` --base=${shellQuote(base)}` : "";
-  const runCmd = `if node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then\n  npx staystack staytest run --incremental${baseArg}\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['verify:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run verify:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run test:incremental\nelse\n  echo "No staystack CLI or incremental test script found; skipping incremental DAG tests."\nfi`;
+  const runCmd = `if node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then\n  npx staystack staytest run --incremental${baseArg}\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['verify:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run verify:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run test:incremental\nelse\n  echo "Missing incremental test script (verify:incremental or test:incremental) in package.json" >&2\n  exit 1\nfi`;
 
   return [
     STRICT_SHELL_HEADER,
@@ -140,18 +140,9 @@ export async function runNodeChecks(
   });
 
   for (const packagePath of packagePaths) {
-
     if (options.format) {
       if (options.runAffected) {
-        workspace = workspace.withExec([
-          "bash",
-          "-lc",
-          [
-            STRICT_SHELL_HEADER,
-            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-            buildRunFirstExistingScriptScript(["format:incremental", "format:check", "format"]),
-          ].join("\n"),
-        ]);
+        workspace = runNpmScript(workspace, "format:incremental", { cwd: packagePath });
       } else {
         workspace = runNpmScript(workspace, "format:check", { cwd: packagePath });
       }
@@ -159,15 +150,7 @@ export async function runNodeChecks(
 
     if (options.lint) {
       if (options.runAffected) {
-        workspace = workspace.withExec([
-          "bash",
-          "-lc",
-          [
-            STRICT_SHELL_HEADER,
-            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-            buildRunFirstExistingScriptScript(["lint:incremental", "lint"]),
-          ].join("\n"),
-        ]);
+        workspace = runNpmScript(workspace, "lint:incremental", { cwd: packagePath });
       } else {
         workspace = runNpmScript(workspace, "lint", { cwd: packagePath });
       }
@@ -184,28 +167,16 @@ export async function runNodeChecks(
           ),
         ]);
       } else {
-        let testWorkspace = workspace;
-        const buildCheck = `node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); process.exit(pkg.scripts && pkg.scripts.build ? 0 : 1)"`;
-
-        testWorkspace = testWorkspace.withExec([
-          "bash",
-          "-lc",
-          [
-            STRICT_SHELL_HEADER,
-            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
-            `if ${buildCheck} 2>/dev/null; then`,
-            `  npm run build`,
-            `fi`,
-          ].join("\n"),
-        ]);
-        workspace = runNpmScript(testWorkspace, options.testScript ?? "test", {
-          cwd: packagePath,
-        });
+        workspace = runNpmScript(workspace, "test", { cwd: packagePath });
       }
     }
 
     if (options.build) {
-      workspace = runNpmScript(workspace, "build", { cwd: packagePath });
+      if (options.runAffected) {
+        workspace = runNpmScript(workspace, "build:incremental", { cwd: packagePath });
+      } else {
+        workspace = runNpmScript(workspace, "build:ci", { cwd: packagePath });
+      }
     }
   }
 
