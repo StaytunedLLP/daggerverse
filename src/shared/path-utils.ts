@@ -20,8 +20,11 @@ export function normalizePaths(value: PathInput | undefined): string[] {
   return splitCsv(value).length > 0 ? splitCsv(value) : ["."];
 }
 
-export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+export function shellQuote(value?: string | null): string {
+  if (value == null) {
+    return "''";
+  }
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
 export function resolveWorkspacePath(
