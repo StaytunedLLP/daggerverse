@@ -167,7 +167,21 @@ export async function runNodeChecks(
           ),
         ]);
       } else {
-        workspace = runNpmScript(workspace, "test", { cwd: packagePath });
+        workspace = workspace.withExec([
+          "bash",
+          "-lc",
+          [
+            STRICT_SHELL_HEADER,
+            `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
+            `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['nightly:test'] ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run nightly:test`,
+            `elif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:full'] ? 0 : 1)" 2>/dev/null; then`,
+            `  npm run test:full`,
+            `else`,
+            `  npm run test`,
+            `fi`,
+          ].join("\n"),
+        ]);
       }
     }
 
