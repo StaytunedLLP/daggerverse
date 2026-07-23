@@ -179,6 +179,7 @@ export class Checks {
     await runNodeChecks(source, nodeAuthToken, {
       lint: true,
       runAffected: true,
+      base: base || "origin/main",
     });
   }
 
