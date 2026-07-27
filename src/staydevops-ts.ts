@@ -324,7 +324,9 @@ export class Checks {
  */
 @object()
 export class StaydevopsTs {
-  private readonly source: Directory;
+  private readonly workspace: Workspace;
+  private readonly workspacePath: string;
+  private readonly workspaceExcludes: string[];
   private readonly nodeAuthToken?: Secret;
   private readonly packagePaths: string;
   private readonly registryScope: string;
@@ -339,14 +341,20 @@ export class StaydevopsTs {
     registryScope = "staytunedllp",
     base = "origin/main",
   ) {
-    this.source = ws.directory(workspacePath || "/", {
-      exclude: workspaceExcludes,
-      gitignore: true,
-    });
+    this.workspace = ws;
+    this.workspacePath = workspacePath || "/";
+    this.workspaceExcludes = workspaceExcludes;
     this.nodeAuthToken = nodeAuthToken;
     this.packagePaths = packagePaths;
     this.registryScope = registryScope;
     this.checkBase = base || "origin/main";
+  }
+
+  private resolveSource(): Directory {
+    return this.workspace.directory(this.workspacePath, {
+      exclude: this.workspaceExcludes,
+      gitignore: true,
+    });
   }
 
   /**
@@ -379,7 +387,7 @@ export class StaydevopsTs {
   @func()
   checks(): Checks {
     return new Checks(
-      this.source,
+      this.resolveSource(),
       this.nodeAuthToken,
       this.packagePaths,
       this.registryScope,
@@ -393,7 +401,7 @@ export class StaydevopsTs {
   @func()
   checksWithAuth(nodeAuthToken?: Secret): Checks {
     return new Checks(
-      this.source,
+      this.resolveSource(),
       nodeAuthToken ?? this.nodeAuthToken,
       this.packagePaths,
       this.registryScope,
