@@ -69,6 +69,7 @@ export function withNpmAuth(
     `@${registryScope}:registry=https://npm.pkg.github.com`,
     "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}",
     "legacy-peer-deps=true",
+    "ignore-scripts=true",
     "",
   ].join("\n");
 
