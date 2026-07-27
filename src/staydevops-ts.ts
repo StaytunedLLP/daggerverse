@@ -3,6 +3,7 @@ import {
   Directory,
   File,
   Secret,
+  Workspace,
   argument,
   check,
   func,
@@ -26,6 +27,14 @@ import {
 import { releasePackage } from "#publish/index.js";
 import { runPlaywrightTests } from "#playwright/index.js";
 
+const DEFAULT_CHECK_WORKSPACE_EXCLUDES = [
+  "dagger",
+  ".dagger",
+  "dist",
+  "node_modules",
+  ".artifacts",
+];
+
 /**
  * Collection of repository checks and validation tools for Node.js projects.
  *
@@ -35,6 +44,39 @@ import { runPlaywrightTests } from "#playwright/index.js";
  */
 @object()
 export class Checks {
+  private readonly source?: Directory;
+  private readonly nodeAuthToken?: Secret;
+  private readonly packagePaths: string;
+  private readonly registryScope: string;
+  private readonly checkBase: string;
+
+  constructor(
+    source?: Directory,
+    nodeAuthToken?: Secret,
+    packagePaths = ".",
+    registryScope = "staytunedllp",
+    base = "origin/main",
+  ) {
+    this.source = source;
+    this.nodeAuthToken = nodeAuthToken;
+    this.packagePaths = packagePaths;
+    this.registryScope = registryScope;
+    this.checkBase = base;
+  }
+
+  private resolveSource(source?: Directory): Directory {
+    const resolved = source ?? this.source;
+    if (!resolved) {
+      throw new Error(
+        "No source directory is bound. Use dagger check from a workspace or pass source to the function.",
+      );
+    }
+    return resolved;
+  }
+
+  private resolveNodeAuthToken(nodeAuthToken?: Secret): Secret | undefined {
+    return nodeAuthToken ?? this.nodeAuthToken;
+  }
 
   /**
    * Fully prepares a Node.js workspace environment by:
@@ -83,23 +125,16 @@ export class Checks {
    * dagger call checks format --source .
    */
   @check()
-  @func()
-  async formatFull(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-    runAffected = false,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async formatFull(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       format: true,
       runAffected: false,
     });
   }
 
-  @check()
   @func()
   async format(
     @argument({
@@ -110,45 +145,36 @@ export class Checks {
     nodeAuthToken?: Secret,
     runAffected = false,
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       format: true,
       runAffected,
     });
   }
 
   @check()
-  @func()
-  async formatIncremental(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async formatIncremental(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       format: true,
       runAffected: true,
     });
   }
 
   @check()
-  @func()
-  async lintFull(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async lintFull(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       lint: true,
       runAffected: false,
     });
   }
 
-  @check()
   @func()
   async lint(
     @argument({
@@ -159,47 +185,37 @@ export class Checks {
     nodeAuthToken?: Secret,
     runAffected = false,
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       lint: true,
       runAffected,
     });
   }
 
   @check()
-  @func()
-  async lintIncremental(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-    base = "origin/main",
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async lintIncremental(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       lint: true,
       runAffected: true,
-      base: base || "origin/main",
+      base: this.checkBase,
     });
   }
 
   @check()
-  @func()
-  async buildFull(
-    @argument({
-      defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async buildFull(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       build: true,
       runAffected: false,
     });
   }
 
-  @check()
   @func()
   async build(
     @argument({
@@ -209,26 +225,25 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.buildFull(source, nodeAuthToken);
+    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
+      build: true,
+      runAffected: false,
+    });
   }
 
   @check()
-  @func()
-  async buildIncremental(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async buildIncremental(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       build: true,
       runAffected: true,
     });
   }
 
-  @check()
   @func()
   async typecheck(
     @argument({
@@ -238,26 +253,20 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await this.buildFull(source, nodeAuthToken);
+    await this.build(source, nodeAuthToken);
   }
 
   @check()
-  @func()
-  async testFull(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async testFull(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       test: true,
       runAffected: false,
     });
   }
 
-  @check()
   @func()
   async test(
     @argument({
@@ -271,7 +280,9 @@ export class Checks {
     base = "origin/main",
     changedFiles = "",
   ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       test: true,
       runAffected,
       testScript,
@@ -281,21 +292,15 @@ export class Checks {
   }
 
   @check()
-  @func()
-  async testIncremental(
-    @argument({
-      defaultPath: ".",
-      ignore: ["dagger", "dist", "node_modules"],
-    })
-    source: Directory,
-    nodeAuthToken?: Secret,
-    base = "origin/main",
-  ): Promise<void> {
-    await runNodeChecks(source, nodeAuthToken, {
+  @func({ cache: "never" })
+  async testIncremental(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
       test: true,
       runAffected: true,
       testScript: "verify:incremental",
-      base,
+      base: this.checkBase,
     });
   }
 }
@@ -319,6 +324,31 @@ export class Checks {
  */
 @object()
 export class StaydevopsTs {
+  private readonly source: Directory;
+  private readonly nodeAuthToken?: Secret;
+  private readonly packagePaths: string;
+  private readonly registryScope: string;
+  private readonly checkBase: string;
+
+  constructor(
+    ws: Workspace,
+    workspacePath = "/",
+    workspaceExcludes: string[] = DEFAULT_CHECK_WORKSPACE_EXCLUDES,
+    packagePaths = ".",
+    nodeAuthToken?: Secret,
+    registryScope = "staytunedllp",
+    base = "origin/main",
+  ) {
+    this.source = ws.directory(workspacePath || "/", {
+      exclude: workspaceExcludes,
+      gitignore: true,
+    });
+    this.nodeAuthToken = nodeAuthToken;
+    this.packagePaths = packagePaths;
+    this.registryScope = registryScope;
+    this.checkBase = base || "origin/main";
+  }
+
   /**
    * Validates the PR title according to Conventional Commits naming convention.
    *
@@ -348,7 +378,27 @@ export class StaydevopsTs {
    */
   @func()
   checks(): Checks {
-    return new Checks();
+    return new Checks(
+      this.source,
+      this.nodeAuthToken,
+      this.packagePaths,
+      this.registryScope,
+      this.checkBase,
+    );
+  }
+
+  /**
+   * Returns repository checks with an explicit npm auth secret override.
+   */
+  @func()
+  checksWithAuth(nodeAuthToken?: Secret): Checks {
+    return new Checks(
+      this.source,
+      nodeAuthToken ?? this.nodeAuthToken,
+      this.packagePaths,
+      this.registryScope,
+      this.checkBase,
+    );
   }
 
   /**
