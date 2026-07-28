@@ -40,9 +40,6 @@ function buildRunAffectedTestScript(
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
-    `test -d .git || { echo "Missing git metadata required for incremental testing." >&2; exit 1; }`,
-    `echo "Running incremental test lane with git metadata available."`,
-    "git status --short --branch",
     runCmd,
   ].join("\n");
 }
@@ -131,12 +128,8 @@ export async function runNodeChecks(
     ]);
   }
 
-  const needsGitMetadata = Boolean(options.runAffected);
-
   let workspace = withFullSource(installed, source, {
-    exclude: needsGitMetadata
-      ? DEFAULT_SOURCE_EXCLUDES.filter((entry) => entry !== ".git")
-      : DEFAULT_SOURCE_EXCLUDES,
+    exclude: DEFAULT_SOURCE_EXCLUDES,
   });
 
   for (const packagePath of packagePaths) {
