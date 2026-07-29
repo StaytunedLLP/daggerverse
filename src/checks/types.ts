@@ -13,4 +13,5 @@ export type NodeChecksOptions = {
   testScript?: string;
   base?: string;
   changedFiles?: string;
+  nodeMaxOldSpaceMb?: number;
 };

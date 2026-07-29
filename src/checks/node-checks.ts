@@ -148,6 +148,7 @@ export async function runNodeChecks(
     packagePaths,
     registryScope: options.registryScope,
     withPlaywrightCache: false,
+    nodeMaxOldSpaceMb: options.nodeMaxOldSpaceMb,
   });
 
   if (options.verifyChromiumBidi) {

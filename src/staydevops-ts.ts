@@ -50,6 +50,7 @@ export class Checks {
   private readonly registryScope: string;
   private readonly checkBase: string;
   private readonly changedFiles: string;
+  private readonly nodeMaxOldSpaceMb: number;
 
   constructor(
     source?: Directory,
@@ -58,6 +59,7 @@ export class Checks {
     registryScope = "staytunedllp",
     base = "origin/main",
     changedFiles = "",
+    nodeMaxOldSpaceMb = 0,
   ) {
     this.source = source;
     this.nodeAuthToken = nodeAuthToken;
@@ -65,6 +67,11 @@ export class Checks {
     this.registryScope = registryScope;
     this.checkBase = base;
     this.changedFiles = changedFiles;
+    this.nodeMaxOldSpaceMb = nodeMaxOldSpaceMb;
+  }
+
+  private get heap(): number | undefined {
+    return this.nodeMaxOldSpaceMb > 0 ? this.nodeMaxOldSpaceMb : undefined;
   }
 
   private resolveSource(source?: Directory): Directory {
@@ -133,6 +140,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       format: true,
       runAffected: false,
     });
@@ -151,6 +159,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       format: true,
       runAffected,
     });
@@ -162,6 +171,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       format: true,
       runAffected: true,
       base: this.checkBase,
@@ -175,6 +185,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       lint: true,
       runAffected: false,
     });
@@ -193,6 +204,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       lint: true,
       runAffected,
     });
@@ -204,6 +216,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       lint: true,
       runAffected: true,
       base: this.checkBase,
@@ -217,6 +230,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       build: true,
       runAffected: false,
     });
@@ -234,6 +248,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       build: true,
       runAffected: false,
     });
@@ -245,6 +260,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       build: true,
       runAffected: true,
       base: this.checkBase,
@@ -270,6 +286,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       test: true,
       runAffected: false,
     });
@@ -291,6 +308,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       test: true,
       runAffected,
       testScript,
@@ -305,6 +323,7 @@ export class Checks {
     await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
       packagePaths: this.packagePaths,
       registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
       test: true,
       runAffected: true,
       testScript: "verify:incremental",
@@ -341,6 +360,7 @@ export class StaydevopsTs {
   private readonly registryScope: string;
   private readonly checkBase: string;
   private readonly changedFiles: string;
+  private readonly nodeMaxOldSpaceMb: number;
 
   constructor(
     ws: Workspace,
@@ -351,6 +371,7 @@ export class StaydevopsTs {
     registryScope = "staytunedllp",
     base = "origin/main",
     changedFiles = "",
+    nodeMaxOldSpaceMb = 0,
   ) {
     this.workspace = ws;
     this.workspacePath = workspacePath || "/";
@@ -360,6 +381,7 @@ export class StaydevopsTs {
     this.registryScope = registryScope;
     this.checkBase = base || "origin/main";
     this.changedFiles = changedFiles;
+    this.nodeMaxOldSpaceMb = nodeMaxOldSpaceMb;
   }
 
   private resolveSource(): Directory {
@@ -405,6 +427,7 @@ export class StaydevopsTs {
       this.registryScope,
       this.checkBase,
       this.changedFiles,
+      this.nodeMaxOldSpaceMb,
     );
   }
 
@@ -420,6 +443,7 @@ export class StaydevopsTs {
       this.registryScope,
       this.checkBase,
       this.changedFiles,
+      this.nodeMaxOldSpaceMb,
     );
   }
 

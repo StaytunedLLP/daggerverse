@@ -5,6 +5,8 @@ export const DEFAULT_PLAYWRIGHT_CACHE = "playwright-cache-node24";
 export const DEFAULT_NPM_CACHE_PATH = "/root/.npm";
 export const DEFAULT_PLAYWRIGHT_CACHE_PATH = "/root/.cache/ms-playwright";
 export const DEFAULT_REGISTRY_SCOPE = "staytunedllp";
+/** Node heap ceiling in MiB, assuming one check runs at a time. */
+export const DEFAULT_NODE_MAX_OLD_SPACE_MB = 4096;
 export const DEFAULT_PLAYWRIGHT_BROWSERS = ["chromium"];
 export const STRICT_SHELL_HEADER = "set -euo pipefail";
 export const DEFAULT_SOURCE_EXCLUDES = [

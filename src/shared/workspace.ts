@@ -12,6 +12,7 @@ export function createNodeWorkspace(
   const resolvedNodeAuthToken = maybeResolveNodeAuthToken(nodeAuthToken);
   let container = createBaseNodeContainer({
     workspace: options.workspace,
+    nodeMaxOldSpaceMb: options.nodeMaxOldSpaceMb,
   });
 
   container = withNpmCache(container);
