@@ -244,6 +244,9 @@ async function publishRelease(
 
   const tagName = `v${manifest.version}`;
 
+  // The registry needs its own credential -- see ReleasePackageOptions.npmToken.
+  const registryToken = options.npmToken ?? options.githubToken;
+
   // Read all three surfaces before touching any of them. An hourly schedule
   // re-runs against state it may have already produced, and the four
   // combinations below are not equally safe: three are recoverable, one means
@@ -252,7 +255,7 @@ async function publishRelease(
     checkRegistryVersion(
       manifest.name,
       manifest.version,
-      options.githubToken,
+      registryToken,
       registryScope,
     ),
     checkTagExists(
@@ -325,7 +328,7 @@ async function publishRelease(
   container = withLockfilesOnly(container, options.source, {
     packagePaths: packagePath,
   });
-  container = withNpmAuth(container, options.githubToken, {
+  container = withNpmAuth(container, registryToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
@@ -339,7 +342,7 @@ async function publishRelease(
     exclude: DEFAULT_SOURCE_EXCLUDES,
   });
   container = requirePackageLock(container, packagePath);
-  container = withNpmAuth(container, options.githubToken, {
+  container = withNpmAuth(container, registryToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
