@@ -49,6 +49,7 @@ export class Checks {
   private readonly packagePaths: string;
   private readonly registryScope: string;
   private readonly checkBase: string;
+  private readonly changedFiles: string;
 
   constructor(
     source?: Directory,
@@ -56,12 +57,14 @@ export class Checks {
     packagePaths = ".",
     registryScope = "staytunedllp",
     base = "origin/main",
+    changedFiles = "",
   ) {
     this.source = source;
     this.nodeAuthToken = nodeAuthToken;
     this.packagePaths = packagePaths;
     this.registryScope = registryScope;
     this.checkBase = base;
+    this.changedFiles = changedFiles;
   }
 
   private resolveSource(source?: Directory): Directory {
@@ -139,7 +142,7 @@ export class Checks {
   async format(
     @argument({
       defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
+      ignore: ["dagger", "dist", "node_modules"],
     })
     source: Directory,
     nodeAuthToken?: Secret,
@@ -161,6 +164,8 @@ export class Checks {
       registryScope: this.registryScope,
       format: true,
       runAffected: true,
+      base: this.checkBase,
+      changedFiles: this.changedFiles,
     });
   }
 
@@ -179,7 +184,7 @@ export class Checks {
   async lint(
     @argument({
       defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
+      ignore: ["dagger", "dist", "node_modules"],
     })
     source: Directory,
     nodeAuthToken?: Secret,
@@ -202,6 +207,7 @@ export class Checks {
       lint: true,
       runAffected: true,
       base: this.checkBase,
+      changedFiles: this.changedFiles,
     });
   }
 
@@ -241,6 +247,8 @@ export class Checks {
       registryScope: this.registryScope,
       build: true,
       runAffected: true,
+      base: this.checkBase,
+      changedFiles: this.changedFiles,
     });
   }
 
@@ -301,6 +309,7 @@ export class Checks {
       runAffected: true,
       testScript: "verify:incremental",
       base: this.checkBase,
+      changedFiles: this.changedFiles,
     });
   }
 }
@@ -331,6 +340,7 @@ export class StaydevopsTs {
   private readonly packagePaths: string;
   private readonly registryScope: string;
   private readonly checkBase: string;
+  private readonly changedFiles: string;
 
   constructor(
     ws: Workspace,
@@ -340,6 +350,7 @@ export class StaydevopsTs {
     nodeAuthToken?: Secret,
     registryScope = "staytunedllp",
     base = "origin/main",
+    changedFiles = "",
   ) {
     this.workspace = ws;
     this.workspacePath = workspacePath || "/";
@@ -348,6 +359,7 @@ export class StaydevopsTs {
     this.packagePaths = packagePaths;
     this.registryScope = registryScope;
     this.checkBase = base || "origin/main";
+    this.changedFiles = changedFiles;
   }
 
   private resolveSource(): Directory {
@@ -392,6 +404,7 @@ export class StaydevopsTs {
       this.packagePaths,
       this.registryScope,
       this.checkBase,
+      this.changedFiles,
     );
   }
 
@@ -406,6 +419,7 @@ export class StaydevopsTs {
       this.packagePaths,
       this.registryScope,
       this.checkBase,
+      this.changedFiles,
     );
   }
 

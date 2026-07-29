@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           INSTALL_DIR="$HOME/.local/bin"
           mkdir -p "$INSTALL_DIR"
-          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v0.21.7" BIN_DIR="$INSTALL_DIR" sh
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v1.0.0-beta.7" BIN_DIR="$INSTALL_DIR" sh
           echo "$INSTALL_DIR" >> "$GITHUB_PATH"
 
       - name: Resolve check pattern

@@ -13,3 +13,17 @@ export const DEFAULT_SOURCE_EXCLUDES = [
   "dist",
   "node_modules",
 ];
+
+/**
+ * Source excludes for incremental ("affected") runs.
+ *
+ * Keeps `.git` in the container: incremental scripts (`verify:incremental`,
+ * `test:incremental`, `staystack staytest --incremental`) resolve the changed
+ * set with `git diff <base>...HEAD`. Without a repository they silently see an
+ * empty diff and select nothing, which makes every incremental check a no-op.
+ */
+export const AFFECTED_SOURCE_EXCLUDES = [
+  "dagger",
+  "dist",
+  "node_modules",
+];

@@ -1,4 +1,5 @@
 import {
+    AFFECTED_SOURCE_EXCLUDES,
     DEFAULT_SOURCE_EXCLUDES,
     DEFAULT_WORKSPACE,
     STRICT_SHELL_HEADER,
@@ -29,18 +30,47 @@ function buildVerifyScript(
   ].join("\n");
 }
 
+function scriptExistsProbe(scriptName: string): string {
+  return `node -e ${shellQuote(
+    `const pkg=require('./package.json'); process.exit(pkg.scripts?.[${JSON.stringify(scriptName)}] ? 0 : 1)`,
+  )} 2>/dev/null`;
+}
+
 function buildRunAffectedTestScript(
   packagePath: string,
   base?: string,
+  preferredScript?: string,
 ): string {
   const baseArg = base ? ` --base=${shellQuote(base)}` : "";
-  const runCmd = `if node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['verify:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run verify:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.scripts?.['test:incremental'] ? 0 : 1)" 2>/dev/null; then\n  npm run test:incremental\nelif node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then\n  npx staystack staytest run --incremental${baseArg}\nelse\n  echo "Missing incremental test script (verify:incremental or test:incremental) in package.json" >&2\n  exit 1\nfi`;
+
+  // Preferred script first (when the caller named one), then the conventional
+  // fallbacks, then staystack's own incremental runner.
+  const candidates = [preferredScript, "verify:incremental", "test:incremental"]
+    .filter((name): name is string => Boolean(name))
+    .filter((name, index, all) => all.indexOf(name) === index);
+
+  const branches: string[] = [];
+  for (const [index, scriptName] of candidates.entries()) {
+    branches.push(
+      `${index === 0 ? "if" : "elif"} ${scriptExistsProbe(scriptName)}; then`,
+      `  npm run ${shellQuote(scriptName)}`,
+    );
+  }
+
+  branches.push(
+    `elif node -e "const pkg=require('./package.json'); process.exit(pkg.dependencies?.['@staytunedllp/staystack'] || pkg.devDependencies?.['@staytunedllp/staystack'] ? 0 : 1)" 2>/dev/null; then`,
+    `  npx staystack staytest run --incremental${baseArg}`,
+    "else",
+    `  echo "Missing incremental test script (${candidates.join(" or ")}) in package.json" >&2`,
+    "  exit 1",
+    "fi",
+  );
 
   return [
     STRICT_SHELL_HEADER,
     `cd ${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, packagePath))}`,
     `export NPM_CONFIG_USERCONFIG=${shellQuote(resolveWorkspacePath(DEFAULT_WORKSPACE, ".npmrc"))}`,
-    runCmd,
+    ...branches,
   ].join("\n");
 }
 
@@ -128,9 +158,21 @@ export async function runNodeChecks(
     ]);
   }
 
+  // Affected runs need the git history in the container to resolve the changed
+  // set; full runs do not, so they keep the cheaper `.git`-free source.
   let workspace = withFullSource(installed, source, {
-    exclude: DEFAULT_SOURCE_EXCLUDES,
+    exclude: options.runAffected
+      ? AFFECTED_SOURCE_EXCLUDES
+      : DEFAULT_SOURCE_EXCLUDES,
   });
+
+  if (options.runAffected) {
+    // Consumed by the affected-selection runtime as a git-free fast path, and
+    // available to consumer `*:incremental` scripts.
+    workspace = workspace
+      .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
+      .withEnvVariable("BASE_REF", options.base ?? "");
+  }
 
   for (const packagePath of packagePaths) {
     if (options.format) {
@@ -157,6 +199,7 @@ export async function runNodeChecks(
           buildRunAffectedTestScript(
             packagePath,
             options.base,
+            options.testScript,
           ),
         ]);
       } else {
