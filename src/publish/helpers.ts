@@ -593,20 +593,40 @@ export async function createReleaseIssue(
   ].join("\n");
 
   const output = await ghContainer(githubToken, repoOwner, repoName)
-    // Body goes in as a file, never as a command argument: it contains
-    // backticks and markdown, and a large or quoted payload on the command line
-    // is how the release branch commit hit ARG_MAX.
-    .withNewFile("/tmp/issue-body.md", body)
+    // Payload goes in as a file, never as command arguments: it contains
+    // markdown and backticks, and a quoted payload on the command line is how
+    // the release branch commit hit ARG_MAX.
+    .withNewFile(
+      "/tmp/issue.json",
+      JSON.stringify({ title: `Release ${version}`, body, type: issueType }),
+    )
+    .withNewFile(
+      "/tmp/fields.json",
+      JSON.stringify({
+        issue_field_values: [{ field_id: priorityFieldId, value: priority }],
+      }),
+    )
     .withExec([
       "sh",
       "-c",
       [
         "set -eu",
-        `url="$(gh issue create --title ${shellQuote(`Release ${version}`)} --type ${shellQuote(issueType)} --body-file /tmp/issue-body.md)"`,
-        `number="\${url##*/}"`,
-        // Priority is a separate org-level field, not an issue attribute, so it
-        // needs its own call. Without it, issue-priority fails.
-        `gh api "repos/${repoOwner}/${repoName}/issues/\${number}/issue-field-values" --method POST -H "X-GitHub-Api-Version: 2026-03-10" -f 'issue_field_values[][field_id]=${priorityFieldId}' -f 'issue_field_values[][value]=${priority}' >/dev/null 2>&1 || true`,
+        // gh api rather than `gh issue create`. The alpine github-cli package
+        // ships a gh that predates issue types, so `gh issue create --type`
+        // fails with "unknown flag: --type". gh api proxies REST directly and
+        // does not depend on the CLI's flag surface.
+        `number="$(gh api "repos/${repoOwner}/${repoName}/issues" --method POST --input /tmp/issue.json --jq .number)"`,
+        // Priority is an org-level custom field, not an issue attribute, so it
+        // needs its own call. Tolerated on failure: a missing priority fails a
+        // policy check with a clear message, which is better than losing the
+        // issue and the release with it.
+        // Priority needs a JSON body via --input. The bracketed -f form
+        // encoding that gh normally accepts is rejected by this endpoint --
+        // verified against a live repository, where -f silently left the field
+        // unset while --input set it. An unset Priority fails the
+        // issue-priority policy check, so the release pull request could not
+        // merge.
+        `gh api "repos/${repoOwner}/${repoName}/issues/\${number}/issue-field-values" --method POST -H "X-GitHub-Api-Version: 2026-03-10" --input /tmp/fields.json >/dev/null 2>&1 || echo "warning: could not set Priority on issue \${number}" >&2`,
         `printf '%s' "\${number}"`,
       ].join("\n"),
     ])
