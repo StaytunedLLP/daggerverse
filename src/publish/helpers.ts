@@ -377,3 +377,167 @@ export async function createGithubRelease(
     ])
     .sync();
 }
+
+/**
+ * Base container for gh operations that must succeed.
+ *
+ * Separate from ghQuery: that one swallows failures because a missing tag is a
+ * legitimate answer. Anything that mutates has to surface its error instead.
+ */
+function ghContainer(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+) {
+  return dag
+    .container()
+    .from("alpine/git:latest")
+    .withExec(["sh", "-c", "apk add --no-cache github-cli jq >/dev/null 2>&1"])
+    .withSecretVariable("GITHUB_TOKEN", githubToken)
+    .withEnvVariable("GH_REPO", `${repoOwner}/${repoName}`);
+}
+
+export interface OpenReleasePr {
+  number: number;
+  url: string;
+  ageHours: number;
+}
+
+/**
+ * Finds an in-flight hourly release pull request, if any.
+ *
+ * The hourly schedule must not open a second release while the first is still
+ * being checked, and it must not treat an indefinitely stuck one as normal --
+ * hence the age, which the caller turns into a failure past a threshold.
+ */
+export async function findOpenReleasePr(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  branchPrefix: string,
+): Promise<OpenReleasePr | undefined> {
+  const out = await ghQuery(
+    githubToken,
+    repoOwner,
+    repoName,
+    `gh pr list --state open --json number,url,createdAt,headRefName ` +
+      `--jq '[.[] | select(.headRefName | startswith("${branchPrefix}"))][0] // empty'`,
+  );
+
+  if (!out) {
+    return undefined;
+  }
+
+  const pr = JSON.parse(out);
+  const ageMs = Date.now() - new Date(pr.createdAt).getTime();
+
+  return {
+    number: pr.number,
+    url: pr.url,
+    ageHours: Math.floor(ageMs / 3_600_000),
+  };
+}
+
+/**
+ * Creates a release branch and commits the updated manifest onto it.
+ *
+ * Uses createCommitOnBranch rather than `git commit && git push` so the commit
+ * is signed by GitHub. The staycore ruleset requires signatures; it currently
+ * targets only the default branch, so an unsigned commit on a release branch
+ * happens to pass today. Depending on that would break the release flow with an
+ * opaque signature error the day the ruleset widens.
+ */
+export async function createReleaseBranchWithCommit(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  branch: string,
+  baseBranch: string,
+  message: string,
+  files: { path: string; contents: string }[],
+): Promise<string> {
+  const additions = files
+    .map(
+      (f) =>
+        `{ path: ${JSON.stringify(f.path)}, contents: $c${files.indexOf(f)} }`,
+    )
+    .join(", ");
+
+  const varDecls = files
+    .map((_, i) => `$c${i}: Base64String!`)
+    .join(", ");
+
+  const fileWrites = files
+    .map(
+      (f, i) =>
+        `printf '%s' ${shellQuote(f.contents)} | base64 | tr -d '\\n' > /tmp/c${i}`,
+    )
+    .join("\n");
+
+  const fileFlags = files.map((_, i) => `-F c${i}=@/tmp/c${i}`).join(" ");
+
+  const output = await ghContainer(githubToken, repoOwner, repoName)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `head_oid="$(gh api "repos/${repoOwner}/${repoName}/git/ref/heads/${baseBranch}" --jq .object.sha)"`,
+        `gh api "repos/${repoOwner}/${repoName}/git/refs" -f ref=${shellQuote(`refs/heads/${branch}`)} -f sha="$head_oid" >/dev/null`,
+        fileWrites,
+        `query='mutation($repo: String!, $branch: String!, $oid: GitObjectID!, $message: String!, ${varDecls}) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repo, branchName: $branch }, message: { headline: $message }, expectedHeadOid: $oid, fileChanges: { additions: [ ${additions} ] } }) { commit { oid } } }'`,
+        `gh api graphql -f query="$query" -F repo=${shellQuote(`${repoOwner}/${repoName}`)} -F branch=${shellQuote(branch)} -F oid="$head_oid" -F message=${shellQuote(message)} ${fileFlags} --jq '.data.createCommitOnBranch.commit.oid'`,
+      ].join("\n"),
+    ])
+    .stdout();
+
+  return output.trim();
+}
+
+/**
+ * Opens the release pull request and returns its URL.
+ */
+export async function createReleasePr(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  branch: string,
+  baseBranch: string,
+  title: string,
+  body: string,
+): Promise<string> {
+  const output = await ghContainer(githubToken, repoOwner, repoName)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `gh pr create --base ${shellQuote(baseBranch)} --head ${shellQuote(branch)} --title ${shellQuote(title)} --body ${shellQuote(body)}`,
+      ].join("\n"),
+    ])
+    .stdout();
+
+  return output.trim().split("\n").pop() ?? "";
+}
+
+/**
+ * Asks GitHub to merge the release pull request once its required checks pass.
+ *
+ * Auto-merge does not bypass protection. Where a ruleset requires a code-owner
+ * review the request simply waits, which is why the caller reports the URL
+ * rather than assuming the merge happened.
+ */
+export async function enableAutoMerge(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  prUrl: string,
+): Promise<void> {
+  await ghContainer(githubToken, repoOwner, repoName)
+    .withExec([
+      "sh",
+      "-c",
+      ["set -eu", `gh pr merge ${shellQuote(prUrl)} --auto --squash`].join("\n"),
+    ])
+    .sync();
+}

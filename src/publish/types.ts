@@ -4,6 +4,7 @@ export type ReleasePackageAction =
   | "sync-pr-version"
   | "publish"
   | "prepare-hourly-release"
+  | "hourly-release"
   | "github-only";
 
 export interface ReleasePackageOptions {
@@ -54,6 +55,25 @@ export interface ReleasePackageOptions {
    * Pull request branch being synchronized.
    */
   prBranch?: string;
+
+  /**
+   * Compute the release and stop. Nothing is branched, committed, or merged.
+   */
+  dryRun?: boolean;
+
+  /**
+   * Ask GitHub to merge the release pull request once required checks pass.
+   */
+  autoMerge?: boolean;
+
+  /**
+   * Age at which an unmerged release pull request is treated as stalled.
+   *
+   * The in-flight guard exits successfully by design, so without this a single
+   * failing check halts releases indefinitely while every run still reports
+   * success.
+   */
+  stalePrHours?: number;
 }
 
 export interface PackageManifest {
@@ -117,6 +137,28 @@ export interface PrepareHourlyReleaseResult {
   lockfileContent?: string;
 }
 
+export interface HourlyReleaseResult {
+  action: "hourly-release";
+  packageName: string;
+  currentVersion: string;
+  nextVersion: string;
+  tagName: string;
+  /**
+   * skipped-in-flight, nothing-to-release, dry-run, or opened. The caller
+   * renders this rather than inferring intent from which fields are set.
+   */
+  outcome:
+    | "skipped-in-flight"
+    | "nothing-to-release"
+    | "dry-run"
+    | "opened";
+  reason: string;
+  prUrl?: string;
+  branch?: string;
+  commitSha?: string;
+  autoMergeRequested: boolean;
+}
+
 export interface GithubOnlyReleaseResult {
   action: "github-only";
   version: string;
@@ -130,4 +172,5 @@ export type ReleasePackageResult =
   | SyncPrVersionResult
   | PublishPackageResult
   | PrepareHourlyReleaseResult
+  | HourlyReleaseResult
   | GithubOnlyReleaseResult;

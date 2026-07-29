@@ -765,10 +765,14 @@ export class StaydevopsTs {
     baseBranch?: string,
     packagePath?: string,
     prBranch?: string,
+    dryRun = false,
+    autoMerge = true,
+    stalePrHours = 6,
   ): Promise<string> {
     const supported = [
       "sync-pr-version",
       "prepare-hourly-release",
+      "hourly-release",
       "publish",
       "github-only",
     ] as const;
@@ -789,6 +793,9 @@ export class StaydevopsTs {
       baseBranch,
       packagePath,
       prBranch,
+      dryRun,
+      autoMerge,
+      stalePrHours,
     });
   }
 }

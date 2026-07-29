@@ -5,6 +5,10 @@ import {
   checkReleaseExists,
   checkTagExists,
   createGithubRelease,
+  createReleaseBranchWithCommit,
+  createReleasePr,
+  enableAutoMerge,
+  findOpenReleasePr,
   ensureFileExistsAtPath,
   extractScope,
   packageFilePath,
@@ -20,6 +24,7 @@ import {
   ReleasePackageResult,
   PublishPackageResult,
   PrepareHourlyReleaseResult,
+  HourlyReleaseResult,
   GithubOnlyReleaseResult,
   SyncPrVersionResult,
 } from "./types.js";
@@ -461,6 +466,166 @@ async function prepareHourlyRelease(
   };
 }
 
+const RELEASE_BRANCH_PREFIX = "release/hourly-";
+
+/**
+ * The whole hourly cycle, in containers.
+ *
+ * This deliberately lives in the module rather than in workflow shell. The
+ * shared runners carry no `gh` and no `jq` -- a first attempt at driving this
+ * from workflow steps died with `gh: command not found` -- and every host tool
+ * a workflow depends on is another thing that can differ between runners. Here
+ * the runner needs Docker and nothing else, and the flow can be exercised
+ * locally with `dagger call`.
+ */
+async function hourlyRelease(
+  options: ReleasePackageOptions,
+): Promise<HourlyReleaseResult> {
+  const packagePath = options.packagePath ?? ".";
+  const baseBranch = options.baseBranch ?? "main";
+  const staleHours = options.stalePrHours ?? 6;
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+
+  parseExactVersion(manifest.version);
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+
+  const nextVersion = nextPatchVersion(manifest.version);
+  const tagName = `v${nextVersion}`;
+
+  const base = {
+    action: "hourly-release" as const,
+    packageName: manifest.name,
+    currentVersion: manifest.version,
+    nextVersion,
+    tagName,
+    autoMergeRequested: options.autoMerge ?? true,
+  };
+
+  // A release already in flight. Exiting successfully is correct -- but only
+  // while it is progressing, so an old one becomes a hard failure rather than a
+  // silent halt.
+  const inFlight = await findOpenReleasePr(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    RELEASE_BRANCH_PREFIX,
+  );
+
+  if (inFlight) {
+    if (inFlight.ageHours >= staleHours) {
+      throw new Error(
+        `Release pull request #${inFlight.number} has been open ${inFlight.ageHours}h ` +
+          `(threshold ${staleHours}h): ${inFlight.url}. ` +
+          "Releases are halted until it merges or is closed.",
+      );
+    }
+
+    return {
+      ...base,
+      outcome: "skipped-in-flight",
+      reason: `Release PR #${inFlight.number} is awaiting checks (${inFlight.ageHours}h old).`,
+      prUrl: inFlight.url,
+    };
+  }
+
+  // The tag this run would produce already exists, so the previous release
+  // landed and nothing has been merged since. The common case on an hourly
+  // schedule.
+  const alreadyReleased = await checkTagExists(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    tagName,
+  );
+
+  if (alreadyReleased) {
+    return {
+      ...base,
+      outcome: "nothing-to-release",
+      reason: `Tag ${tagName} already exists; nothing to release.`,
+    };
+  }
+
+  const manifestFile = packageFilePath(packagePath, "package.json");
+  const lockFile = packageFilePath(packagePath, "package-lock.json");
+
+  const manifestJson = JSON.parse(
+    await options.source.file(manifestFile).contents(),
+  );
+  manifestJson.version = nextVersion;
+
+  const lockJson = JSON.parse(await options.source.file(lockFile).contents());
+  lockJson.version = nextVersion;
+  if (lockJson.packages?.[""]) {
+    // npm stores the version twice, and a mismatch makes `npm ci` refuse to
+    // install.
+    lockJson.packages[""].version = nextVersion;
+  }
+
+  if (options.dryRun) {
+    return {
+      ...base,
+      outcome: "dry-run",
+      reason: `Would release ${nextVersion}.`,
+    };
+  }
+
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .slice(0, 10);
+  const branch = `${RELEASE_BRANCH_PREFIX}${stamp}`;
+  const message = `chore(release): hourly v${nextVersion}`;
+
+  const commitSha = await createReleaseBranchWithCommit(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    branch,
+    baseBranch,
+    message,
+    [
+      { path: manifestFile, contents: `${JSON.stringify(manifestJson, null, 2)}\n` },
+      { path: lockFile, contents: `${JSON.stringify(lockJson, null, 2)}\n` },
+    ],
+  );
+
+  const prUrl = await createReleasePr(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    branch,
+    baseBranch,
+    message,
+    [
+      "Version-only release prepared by the hourly schedule.",
+      "",
+      `- Version: \`${nextVersion}\``,
+      `- Tag on merge: \`${tagName}\``,
+      "",
+      `Publishing happens after merge, from the manifest change on \`${baseBranch}\`.`,
+    ].join("\n"),
+  );
+
+  if (base.autoMergeRequested) {
+    await enableAutoMerge(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      prUrl,
+    );
+  }
+
+  return {
+    ...base,
+    outcome: "opened",
+    reason: `Opened release pull request for ${nextVersion}.`,
+    prUrl,
+    branch,
+    commitSha,
+  };
+}
+
 /**
  * Tags and creates a GitHub Release without publishing a package.
  *
@@ -545,6 +710,9 @@ export async function releasePackage(
     case "prepare-hourly-release":
       result = await prepareHourlyRelease(options);
       break;
+    case "hourly-release":
+      result = await hourlyRelease(options);
+      break;
     case "github-only":
       result = await githubOnlyRelease(options);
       break;
@@ -556,7 +724,7 @@ export async function releasePackage(
       // destructive branch. Fail instead.
       throw new Error(
         `Unknown release action "${options.action}". Expected one of: ` +
-          "sync-pr-version, prepare-hourly-release, publish, github-only.",
+          "sync-pr-version, prepare-hourly-release, hourly-release, publish, github-only.",
       );
   }
 
