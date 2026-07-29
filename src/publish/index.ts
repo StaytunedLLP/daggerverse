@@ -2,8 +2,12 @@ import path from "node:path";
 import { Directory, Secret, dag } from "@dagger.io/dagger";
 import {
   checkRegistryVersion,
+  checkReleaseExists,
+  checkTagExists,
+  createGithubRelease,
   ensureFileExistsAtPath,
   extractScope,
+  packageFilePath,
   compareVersions,
   nextPatchVersion,
   parseExactVersion,
@@ -15,6 +19,8 @@ import {
   ReleasePackageOptions,
   ReleasePackageResult,
   PublishPackageResult,
+  PrepareHourlyReleaseResult,
+  GithubOnlyReleaseResult,
   SyncPrVersionResult,
 } from "./types.js";
 import {
@@ -231,17 +237,81 @@ async function publishRelease(
   await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
   parseExactVersion(manifest.version);
 
-  if (
-    await checkRegistryVersion(
+  const tagName = `v${manifest.version}`;
+
+  // Read all three surfaces before touching any of them. An hourly schedule
+  // re-runs against state it may have already produced, and the four
+  // combinations below are not equally safe: three are recoverable, one means
+  // a human has to look.
+  const [inRegistry, tagExists, releaseExists] = await Promise.all([
+    checkRegistryVersion(
       manifest.name,
       manifest.version,
       options.githubToken,
       registryScope,
-    )
-  ) {
+    ),
+    checkTagExists(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      tagName,
+    ),
+    checkReleaseExists(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      tagName,
+    ),
+  ]);
+
+  // A tag without the package means a publish died between the two steps.
+  // Re-running would push a package under a tag that already names a
+  // different tree, so stop and say exactly which surfaces disagree.
+  if (tagExists && !inRegistry) {
     throw new Error(
-      `Version "${manifest.version}" of package "${manifest.name}" already exists in the registry.`,
+      `Partial release state for "${manifest.name}@${manifest.version}": ` +
+        `tag "${tagName}" exists but the package is absent from the registry. ` +
+        "Resolve by hand -- either publish the package for that tag or delete " +
+        "the tag if the release was abandoned.",
     );
+  }
+
+  // Everything already present. Success, not a failure: this is what an
+  // unchanged hourly run looks like.
+  if (inRegistry && tagExists && releaseExists) {
+    return {
+      action: "publish",
+      packageName: manifest.name,
+      publishedVersion: manifest.version,
+      tagged: true,
+      tagName,
+      registryPublished: false,
+      releaseCreated: false,
+      noop: true,
+    };
+  }
+
+  // Package and tag exist but the Release is missing -- repair it without
+  // republishing. This is the state the workflow's old raw-curl release call
+  // left behind whenever it failed after a successful publish.
+  if (inRegistry && tagExists && !releaseExists) {
+    await createGithubRelease(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      tagName,
+    );
+
+    return {
+      action: "publish",
+      packageName: manifest.name,
+      publishedVersion: manifest.version,
+      tagged: true,
+      tagName,
+      registryPublished: false,
+      releaseCreated: true,
+      noop: false,
+    };
   }
 
   let container = createBaseNodeContainer();
@@ -295,7 +365,16 @@ async function publishRelease(
   ]);
 
   await container.sync();
-  const tagName = await pushReleaseTag(options, manifest.version);
+
+  // tagExists is false here: the only path that reaches this point with a tag
+  // already present threw above as a partial state.
+  await pushReleaseTag(options, manifest.version);
+  await createGithubRelease(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    tagName,
+  );
 
   return {
     action: "publish",
@@ -303,19 +382,183 @@ async function publishRelease(
     publishedVersion: manifest.version,
     tagged: true,
     tagName,
+    registryPublished: true,
+    releaseCreated: true,
+    noop: false,
   };
 }
 
 /**
- * Production release pipeline with PR version synchronization and main-only publishing.
+ * Computes the next release without touching anything remote.
+ *
+ * Deliberately side-effect free: it returns the version and the manifest
+ * content to commit, and the caller creates the pull request. Keeping the
+ * mutation in the workflow means a dry run is genuinely dry, and it keeps this
+ * function cheap enough to call on an hourly schedule that mostly finds
+ * nothing to do.
+ */
+async function prepareHourlyRelease(
+  options: ReleasePackageOptions,
+): Promise<PrepareHourlyReleaseResult> {
+  const packagePath = options.packagePath ?? ".";
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+
+  // Reject a non-exact version before computing anything from it. A range or
+  // prerelease here would produce a nonsense tag.
+  parseExactVersion(manifest.version);
+  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+
+  const nextVersion = nextPatchVersion(manifest.version);
+  const tagName = `v${nextVersion}`;
+
+  // If the tag this run would produce already exists, the previous hour's
+  // release landed and nothing new has been merged since.
+  const alreadyReleased = await checkTagExists(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    tagName,
+  );
+
+  if (alreadyReleased) {
+    return {
+      action: "prepare-hourly-release",
+      packageName: manifest.name,
+      currentVersion: manifest.version,
+      nextVersion,
+      tagName,
+      releaseNeeded: false,
+      reason: `Tag ${tagName} already exists; nothing to release.`,
+    };
+  }
+
+  const manifestFile = packageFilePath(packagePath, "package.json");
+  const lockFile = packageFilePath(packagePath, "package-lock.json");
+
+  const manifestJson = JSON.parse(
+    await options.source.file(manifestFile).contents(),
+  );
+  manifestJson.version = nextVersion;
+
+  const lockJson = JSON.parse(await options.source.file(lockFile).contents());
+  lockJson.version = nextVersion;
+  if (lockJson.packages?.[""]) {
+    // npm keeps the version in two places and a mismatch makes `npm ci` refuse
+    // to install, so both move together.
+    lockJson.packages[""].version = nextVersion;
+  }
+
+  return {
+    action: "prepare-hourly-release",
+    packageName: manifest.name,
+    currentVersion: manifest.version,
+    nextVersion,
+    tagName,
+    releaseNeeded: true,
+    reason: `Next patch release ${nextVersion}.`,
+    manifestContent: `${JSON.stringify(manifestJson, null, 2)}\n`,
+    lockfileContent: `${JSON.stringify(lockJson, null, 2)}\n`,
+  };
+}
+
+/**
+ * Tags and creates a GitHub Release without publishing a package.
+ *
+ * For repositories whose release artifact is not a package: a private
+ * application, or a Dagger module where the public git tag is itself the
+ * distribution mechanism and no publish command exists.
+ */
+async function githubOnlyRelease(
+  options: ReleasePackageOptions,
+): Promise<GithubOnlyReleaseResult> {
+  const packagePath = options.packagePath ?? ".";
+  const manifest = await readPackageJsonAtPath(options.source, packagePath);
+
+  parseExactVersion(manifest.version);
+
+  const tagName = `v${manifest.version}`;
+
+  const [tagExists, releaseExists] = await Promise.all([
+    checkTagExists(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      tagName,
+    ),
+    checkReleaseExists(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      tagName,
+    ),
+  ]);
+
+  if (tagExists && releaseExists) {
+    return {
+      action: "github-only",
+      version: manifest.version,
+      tagName,
+      tagCreated: false,
+      releaseCreated: false,
+      noop: true,
+    };
+  }
+
+  if (!tagExists) {
+    await pushReleaseTag(options, manifest.version);
+  }
+
+  // Reached when the tag existed but its Release did not -- the repair case.
+  await createGithubRelease(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    tagName,
+  );
+
+  return {
+    action: "github-only",
+    version: manifest.version,
+    tagName,
+    tagCreated: !tagExists,
+    releaseCreated: true,
+    noop: false,
+  };
+}
+
+/**
+ * Production release pipeline.
+ *
+ * `prepare-hourly-release` computes and returns; `publish` and `github-only`
+ * mutate remote state and are idempotent, so an hourly schedule can re-run
+ * them safely.
  */
 export async function releasePackage(
   options: ReleasePackageOptions,
 ): Promise<string> {
-  const result =
-    options.action === "sync-pr-version"
-      ? await syncPrVersion(options)
-      : await publishRelease(options);
+  let result: ReleasePackageResult;
+
+  switch (options.action) {
+    case "sync-pr-version":
+      result = await syncPrVersion(options);
+      break;
+    case "prepare-hourly-release":
+      result = await prepareHourlyRelease(options);
+      break;
+    case "github-only":
+      result = await githubOnlyRelease(options);
+      break;
+    case "publish":
+      result = await publishRelease(options);
+      break;
+    default:
+      // An unknown action used to fall through to publish, which is the most
+      // destructive branch. Fail instead.
+      throw new Error(
+        `Unknown release action "${options.action}". Expected one of: ` +
+          "sync-pr-version, prepare-hourly-release, publish, github-only.",
+      );
+  }
 
   return serializeResult(result);
 }

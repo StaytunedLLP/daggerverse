@@ -25,6 +25,7 @@ import {
   gitDiffStaged,
 } from "#git/index.js";
 import { releasePackage } from "#publish/index.js";
+import type { ReleasePackageAction } from "#publish/types.js";
 import { runPlaywrightTests } from "#playwright/index.js";
 
 const DEFAULT_CHECK_WORKSPACE_EXCLUDES = [
@@ -725,8 +726,17 @@ export class StaydevopsTs {
    * ahead of the latest base branch patch version without overwriting manual major/minor bumps.
    * When a bump is needed, the function commits and pushes the update back to the PR branch.
    *
-   * Use `publish` on the main branch to validate the canonical package version, detect registry
-   * conflicts, publish the package, and push the release tag.
+   * Use `prepare-hourly-release` to compute the next patch version and return the manifest and
+   * lockfile content to commit. It creates nothing and pushes nothing, so a dry run is genuinely
+   * dry and the caller owns the pull request.
+   *
+   * Use `publish` on the main branch to publish the package, push the tag, and create the GitHub
+   * Release. It is idempotent: an already-published version with its tag and Release is a
+   * successful no-op, a missing Release is repaired without republishing, and a tag whose package
+   * is absent fails loudly because that means a previous publish died midway.
+   *
+   * Use `github-only` where the release artifact is not a package -- a private application, or a
+   * Dagger module whose public git tag is itself the distribution mechanism.
    *
    * This flow assumes branch protection requires pull requests to be up to date before merging.
    *
@@ -756,14 +766,21 @@ export class StaydevopsTs {
     packagePath?: string,
     prBranch?: string,
   ): Promise<string> {
-    if (action !== "sync-pr-version" && action !== "publish") {
+    const supported = [
+      "sync-pr-version",
+      "prepare-hourly-release",
+      "publish",
+      "github-only",
+    ] as const;
+
+    if (!supported.includes(action as (typeof supported)[number])) {
       throw new Error(
-        `Unsupported release action "${action}". Expected "sync-pr-version" or "publish".`,
+        `Unsupported release action "${action}". Expected one of: ${supported.join(", ")}.`,
       );
     }
 
     return releasePackage({
-      action,
+      action: action as ReleasePackageAction,
       source,
       githubToken,
       repoOwner,

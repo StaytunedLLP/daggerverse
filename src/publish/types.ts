@@ -1,6 +1,10 @@
 import { Directory, Secret } from "@dagger.io/dagger";
 
-export type ReleasePackageAction = "sync-pr-version" | "publish";
+export type ReleasePackageAction =
+  | "sync-pr-version"
+  | "publish"
+  | "prepare-hourly-release"
+  | "github-only";
 
 export interface ReleasePackageOptions {
   /**
@@ -82,8 +86,48 @@ export interface PublishPackageResult {
   publishedVersion: string;
   tagged: boolean;
   tagName?: string;
+  /**
+   * What each surface required. An hourly job re-runs against state it may
+   * have already produced, so the caller needs to distinguish "did the work"
+   * from "found it already done" -- both are success.
+   */
+  registryPublished: boolean;
+  releaseCreated: boolean;
+  noop: boolean;
+}
+
+export interface PrepareHourlyReleaseResult {
+  action: "prepare-hourly-release";
+  packageName: string;
+  currentVersion: string;
+  nextVersion: string;
+  tagName: string;
+  /**
+   * False when nothing has landed since the last tag, which is the common
+   * case for an hourly schedule and must exit successfully rather than open
+   * an empty release pull request.
+   */
+  releaseNeeded: boolean;
+  reason: string;
+  /**
+   * The manifest content the caller should commit. Returned rather than
+   * written so this action stays free of remote side effects.
+   */
+  manifestContent?: string;
+  lockfileContent?: string;
+}
+
+export interface GithubOnlyReleaseResult {
+  action: "github-only";
+  version: string;
+  tagName: string;
+  tagCreated: boolean;
+  releaseCreated: boolean;
+  noop: boolean;
 }
 
 export type ReleasePackageResult =
   | SyncPrVersionResult
-  | PublishPackageResult;
+  | PublishPackageResult
+  | PrepareHourlyReleaseResult
+  | GithubOnlyReleaseResult;
