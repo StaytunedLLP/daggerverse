@@ -43,9 +43,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Read the version from this repository's own dagger.json rather than
+          # repeating it here. daggerverse is the authority -- engineVersion is
+          # what the module loader enforces -- so a literal in this file is a
+          # copy that can disagree with the module it installs a CLI for.
+          #
+          # staydevops mirrors this value in .github/dagger-version and its
+          # dagger-version-drift workflow fails when the two diverge. That guard
+          # is pointless if the authority itself carries a second copy.
+          version="$(jq -r .engineVersion dagger.json)"
+          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
+            echo "::error file=dagger.json::engineVersion is missing or empty."
+            exit 1
+          fi
+          echo "Installing Dagger ${version} from dagger.json"
+
           INSTALL_DIR="$HOME/.local/bin"
           mkdir -p "$INSTALL_DIR"
-          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="v1.0.0-beta.7" BIN_DIR="$INSTALL_DIR" sh
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION="${version}" BIN_DIR="$INSTALL_DIR" sh
           echo "$INSTALL_DIR" >> "$GITHUB_PATH"
 
       - name: Resolve check pattern
