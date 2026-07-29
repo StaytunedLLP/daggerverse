@@ -446,10 +446,13 @@ async function prepareHourlyRelease(
   manifestJson.version = nextVersion;
 
   const lockJson = JSON.parse(await options.source.file(lockFile).contents());
-  lockJson.version = nextVersion;
-  if (lockJson.packages?.[""]) {
-    // npm keeps the version in two places and a mismatch makes `npm ci` refuse
-    // to install, so both move together.
+
+  // Update the version only where npm already wrote one -- see hourlyRelease
+  // for why. gonow.travel's lockfile has it in neither place.
+  if (typeof lockJson.version === "string") {
+    lockJson.version = nextVersion;
+  }
+  if (typeof lockJson.packages?.[""]?.version === "string") {
     lockJson.packages[""].version = nextVersion;
   }
 
@@ -555,10 +558,16 @@ async function hourlyRelease(
   manifestJson.version = nextVersion;
 
   const lockJson = JSON.parse(await options.source.file(lockFile).contents());
-  lockJson.version = nextVersion;
-  if (lockJson.packages?.[""]) {
-    // npm stores the version twice, and a mismatch makes `npm ci` refuse to
-    // install.
+
+  // Update the version only where npm already wrote one. A private application
+  // whose manifest carries no version has a lockfile with none either
+  // (gonow.travel is shaped exactly this way), and injecting the key would
+  // produce a lockfile npm never generated. Where both copies exist they must
+  // move together, because a mismatch makes `npm ci` refuse to install.
+  if (typeof lockJson.version === "string") {
+    lockJson.version = nextVersion;
+  }
+  if (typeof lockJson.packages?.[""]?.version === "string") {
     lockJson.packages[""].version = nextVersion;
   }
 
