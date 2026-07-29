@@ -142,7 +142,7 @@ export class Checks {
   async format(
     @argument({
       defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
+      ignore: ["dagger", "dist", "node_modules"],
     })
     source: Directory,
     nodeAuthToken?: Secret,
@@ -184,7 +184,7 @@ export class Checks {
   async lint(
     @argument({
       defaultPath: ".",
-      ignore: [".git", "dagger", "dist", "node_modules"],
+      ignore: ["dagger", "dist", "node_modules"],
     })
     source: Directory,
     nodeAuthToken?: Secret,
