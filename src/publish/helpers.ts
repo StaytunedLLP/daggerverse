@@ -600,6 +600,12 @@ export async function createReleaseIssue(
       "/tmp/issue.json",
       JSON.stringify({ title: `Release ${version}`, body, type: issueType }),
     )
+    .withNewFile(
+      "/tmp/fields.json",
+      JSON.stringify({
+        issue_field_values: [{ field_id: priorityFieldId, value: priority }],
+      }),
+    )
     .withExec([
       "sh",
       "-c",
@@ -614,7 +620,13 @@ export async function createReleaseIssue(
         // needs its own call. Tolerated on failure: a missing priority fails a
         // policy check with a clear message, which is better than losing the
         // issue and the release with it.
-        `gh api "repos/${repoOwner}/${repoName}/issues/\${number}/issue-field-values" --method POST -H "X-GitHub-Api-Version: 2026-03-10" -f 'issue_field_values[][field_id]=${priorityFieldId}' -f 'issue_field_values[][value]=${priority}' >/dev/null 2>&1 || echo "warning: could not set Priority on issue \${number}" >&2`,
+        // Priority needs a JSON body via --input. The bracketed -f form
+        // encoding that gh normally accepts is rejected by this endpoint --
+        // verified against a live repository, where -f silently left the field
+        // unset while --input set it. An unset Priority fails the
+        // issue-priority policy check, so the release pull request could not
+        // merge.
+        `gh api "repos/${repoOwner}/${repoName}/issues/\${number}/issue-field-values" --method POST -H "X-GitHub-Api-Version: 2026-03-10" --input /tmp/fields.json >/dev/null 2>&1 || echo "warning: could not set Priority on issue \${number}" >&2`,
         `printf '%s' "\${number}"`,
       ].join("\n"),
     ])
