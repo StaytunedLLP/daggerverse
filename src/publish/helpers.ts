@@ -457,26 +457,34 @@ export async function createReleaseBranchWithCommit(
   files: { path: string; contents: string }[],
 ): Promise<string> {
   const additions = files
-    .map(
-      (f) =>
-        `{ path: ${JSON.stringify(f.path)}, contents: $c${files.indexOf(f)} }`,
-    )
+    .map((f, i) => `{ path: ${JSON.stringify(f.path)}, contents: $c${i} }`)
     .join(", ");
 
-  const varDecls = files
-    .map((_, i) => `$c${i}: Base64String!`)
-    .join(", ");
+  const varDecls = files.map((_, i) => `$c${i}: Base64String!`).join(", ");
 
-  const fileWrites = files
+  const fileFlags = files.map((_, i) => `-F c${i}=@/tmp/c${i}.b64`).join(" ");
+
+  // Contents are mounted as files, never interpolated into the command.
+  //
+  // The first version embedded them via shellQuote. A live run died on it:
+  // staydevops' package-lock.json is 687 KB, and once escaped and placed
+  // alongside the GraphQL query in a single `sh -c` string it exceeds ARG_MAX
+  // (1 MB) and the exec fails with the whole lockfile in the error output. A
+  // dry run cannot catch this, because it returns before mutating anything.
+  let container = ghContainer(githubToken, repoOwner, repoName);
+
+  for (const [i, file] of files.entries()) {
+    container = container.withNewFile(`/tmp/c${i}.raw`, file.contents);
+  }
+
+  const encodeSteps = files
     .map(
-      (f, i) =>
-        `printf '%s' ${shellQuote(f.contents)} | base64 | tr -d '\\n' > /tmp/c${i}`,
+      (_, i) =>
+        `base64 -w 0 /tmp/c${i}.raw > /tmp/c${i}.b64 2>/dev/null || base64 /tmp/c${i}.raw | tr -d '\\n' > /tmp/c${i}.b64`,
     )
     .join("\n");
 
-  const fileFlags = files.map((_, i) => `-F c${i}=@/tmp/c${i}`).join(" ");
-
-  const output = await ghContainer(githubToken, repoOwner, repoName)
+  const output = await container
     .withExec([
       "sh",
       "-c",
@@ -484,7 +492,7 @@ export async function createReleaseBranchWithCommit(
         "set -eu",
         `head_oid="$(gh api "repos/${repoOwner}/${repoName}/git/ref/heads/${baseBranch}" --jq .object.sha)"`,
         `gh api "repos/${repoOwner}/${repoName}/git/refs" -f ref=${shellQuote(`refs/heads/${branch}`)} -f sha="$head_oid" >/dev/null`,
-        fileWrites,
+        encodeSteps,
         `query='mutation($repo: String!, $branch: String!, $oid: GitObjectID!, $message: String!, ${varDecls}) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repo, branchName: $branch }, message: { headline: $message }, expectedHeadOid: $oid, fileChanges: { additions: [ ${additions} ] } }) { commit { oid } } }'`,
         `gh api graphql -f query="$query" -F repo=${shellQuote(`${repoOwner}/${repoName}`)} -F branch=${shellQuote(branch)} -F oid="$head_oid" -F message=${shellQuote(message)} ${fileFlags} --jq '.data.createCommitOnBranch.commit.oid'`,
       ].join("\n"),
