@@ -1,6 +1,7 @@
 import { Container, dag } from "@dagger.io/dagger";
 import {
   DEFAULT_IMAGE,
+  DEFAULT_NODE_MAX_OLD_SPACE_MB,
   DEFAULT_NPM_CACHE,
   DEFAULT_NPM_CACHE_PATH,
   DEFAULT_PLAYWRIGHT_CACHE,
@@ -14,12 +15,15 @@ export function createBaseNodeContainer(
 ): Container {
   const workspace = options.workspace ?? DEFAULT_WORKSPACE;
 
+  const maxOldSpaceMb =
+    options.nodeMaxOldSpaceMb ?? DEFAULT_NODE_MAX_OLD_SPACE_MB;
+
   return dag
     .container()
     .from(options.image ?? DEFAULT_IMAGE)
     .withWorkdir(workspace)
     .withEnvVariable("HUSKY", "0")
-    .withEnvVariable("NODE_OPTIONS", "--max-old-space-size=4096");
+    .withEnvVariable("NODE_OPTIONS", `--max-old-space-size=${maxOldSpaceMb}`);
 }
 
 export function withMountedCache(
