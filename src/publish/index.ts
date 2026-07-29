@@ -6,6 +6,7 @@ import {
   checkTagExists,
   createGithubRelease,
   createReleaseBranchWithCommit,
+  createReleaseIssue,
   createReleasePr,
   enableAutoMerge,
   findOpenReleasePr,
@@ -602,6 +603,19 @@ async function hourlyRelease(
     ],
   );
 
+  // The organisation's policy checks all evaluate against a linked issue, so a
+  // release pull request needs one or it can never merge. Created before the
+  // pull request so the body can reference it.
+  const issueNumber = await createReleaseIssue(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    nextVersion,
+    options.releaseIssueType ?? "Task 📀",
+    options.releaseIssuePriority ?? "P3",
+    options.priorityFieldId ?? 3129,
+  );
+
   const prUrl = await createReleasePr(
     options.githubToken,
     options.repoOwner,
@@ -616,6 +630,8 @@ async function hourlyRelease(
       `- Tag on merge: \`${tagName}\``,
       "",
       `Publishing happens after merge, from the manifest change on \`${baseBranch}\`.`,
+      "",
+      `Closes #${issueNumber}`,
     ].join("\n"),
   );
 

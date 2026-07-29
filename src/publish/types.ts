@@ -69,6 +69,22 @@ export interface ReleasePackageOptions {
   npmToken?: Secret;
 
   /**
+   * Issue type for the release tracking issue. Must exist in the organisation.
+   */
+  releaseIssueType?: string;
+
+  /**
+   * Priority for the release tracking issue.
+   */
+  releaseIssuePriority?: string;
+
+  /**
+   * Organisation issue-field id for Priority. It is an org-level custom field
+   * rather than an issue attribute, so it needs a separate API call.
+   */
+  priorityFieldId?: number;
+
+  /**
    * Compute the release and stop. Nothing is branched, committed, or merged.
    */
   dryRun?: boolean;
