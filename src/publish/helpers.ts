@@ -7,7 +7,7 @@ import { shellQuote } from "#shared/path-utils.js";
 const EXACT_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const REGISTRY_SCOPE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
-function packageFilePath(packagePath: string, fileName: string): string {
+export function packageFilePath(packagePath: string, fileName: string): string {
   if (packagePath === "." || packagePath.length === 0) {
     return fileName;
   }
@@ -268,4 +268,112 @@ export async function checkRegistryVersion(
   return (
     parsed === version || (Array.isArray(parsed) && parsed.includes(version))
   );
+}
+
+/**
+ * Runs a gh CLI command against the repository and returns its trimmed stdout.
+ *
+ * Release state lives in four places -- manifest, tag, GitHub Release, and
+ * registry -- and the hourly flow has to read three of them before deciding
+ * what to do. Going through gh rather than raw curl keeps the auth handling in
+ * one place and gives useful errors instead of a JSON blob.
+ */
+async function ghQuery(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  args: string,
+): Promise<string> {
+  const output = await dag
+    .container()
+    .from("alpine/git:latest")
+    .withExec(["sh", "-c", "apk add --no-cache github-cli >/dev/null 2>&1"])
+    .withSecretVariable("GITHUB_TOKEN", githubToken)
+    .withEnvVariable("GH_REPO", `${repoOwner}/${repoName}`)
+    .withExec([
+      "sh",
+      "-c",
+      // A missing tag or release is a legitimate answer, not a failure, so the
+      // command must not abort the pipeline when gh exits non-zero.
+      `${args} 2>/dev/null || true`,
+    ])
+    .stdout();
+
+  return output.trim();
+}
+
+/**
+ * Reports whether a git tag already exists on the remote.
+ */
+export async function checkTagExists(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  tagName: string,
+): Promise<boolean> {
+  const out = await ghQuery(
+    githubToken,
+    repoOwner,
+    repoName,
+    `gh api "repos/${repoOwner}/${repoName}/git/ref/tags/${tagName}" --jq .ref`,
+  );
+
+  return out === `refs/tags/${tagName}`;
+}
+
+/**
+ * Reports whether a GitHub Release already exists for a tag.
+ *
+ * Distinct from the tag existing: a tag with no Release is the repair case the
+ * release flow must handle rather than fail on.
+ */
+export async function checkReleaseExists(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  tagName: string,
+): Promise<boolean> {
+  const out = await ghQuery(
+    githubToken,
+    repoOwner,
+    repoName,
+    `gh api "repos/${repoOwner}/${repoName}/releases/tags/${tagName}" --jq .tag_name`,
+  );
+
+  return out === tagName;
+}
+
+/**
+ * Creates a GitHub Release for an existing tag.
+ *
+ * `--verify-tag` refuses to invent a tag that does not exist, which turns a
+ * silent mistake into an error, and `--generate-notes` replaces the hand-rolled
+ * release body the workflow used to assemble.
+ */
+export async function createGithubRelease(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  tagName: string,
+  previousTag?: string,
+): Promise<void> {
+  const notesStart = previousTag
+    ? ` --notes-start-tag ${shellQuote(previousTag)}`
+    : "";
+
+  await dag
+    .container()
+    .from("alpine/git:latest")
+    .withExec(["sh", "-c", "apk add --no-cache github-cli >/dev/null 2>&1"])
+    .withSecretVariable("GITHUB_TOKEN", githubToken)
+    .withEnvVariable("GH_REPO", `${repoOwner}/${repoName}`)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `gh release create ${shellQuote(tagName)} --verify-tag --generate-notes --title ${shellQuote(tagName)}${notesStart}`,
+      ].join("\n"),
+    ])
+    .sync();
 }
