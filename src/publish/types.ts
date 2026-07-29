@@ -57,6 +57,34 @@ export interface ReleasePackageOptions {
   prBranch?: string;
 
   /**
+   * Credential for the package registry, when it must differ from githubToken.
+   *
+   * A GitHub App installation token cannot write an organization package
+   * without a per-package grant -- npm returns
+   * "installation not allowed to Write organization package". A repository
+   * Actions token with packages: write can, which is what the retired
+   * publish-release job used successfully. So git and pull request work uses
+   * the app token while the registry uses this one. Falls back to githubToken.
+   */
+  npmToken?: Secret;
+
+  /**
+   * Issue type for the release tracking issue. Must exist in the organisation.
+   */
+  releaseIssueType?: string;
+
+  /**
+   * Priority for the release tracking issue.
+   */
+  releaseIssuePriority?: string;
+
+  /**
+   * Organisation issue-field id for Priority. It is an org-level custom field
+   * rather than an issue attribute, so it needs a separate API call.
+   */
+  priorityFieldId?: number;
+
+  /**
    * Compute the release and stop. Nothing is branched, committed, or merged.
    */
   dryRun?: boolean;

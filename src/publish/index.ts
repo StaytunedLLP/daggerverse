@@ -6,6 +6,7 @@ import {
   checkTagExists,
   createGithubRelease,
   createReleaseBranchWithCommit,
+  createReleaseIssue,
   createReleasePr,
   enableAutoMerge,
   findOpenReleasePr,
@@ -244,6 +245,9 @@ async function publishRelease(
 
   const tagName = `v${manifest.version}`;
 
+  // The registry needs its own credential -- see ReleasePackageOptions.npmToken.
+  const registryToken = options.npmToken ?? options.githubToken;
+
   // Read all three surfaces before touching any of them. An hourly schedule
   // re-runs against state it may have already produced, and the four
   // combinations below are not equally safe: three are recoverable, one means
@@ -252,7 +256,7 @@ async function publishRelease(
     checkRegistryVersion(
       manifest.name,
       manifest.version,
-      options.githubToken,
+      registryToken,
       registryScope,
     ),
     checkTagExists(
@@ -325,7 +329,7 @@ async function publishRelease(
   container = withLockfilesOnly(container, options.source, {
     packagePaths: packagePath,
   });
-  container = withNpmAuth(container, options.githubToken, {
+  container = withNpmAuth(container, registryToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
@@ -339,7 +343,7 @@ async function publishRelease(
     exclude: DEFAULT_SOURCE_EXCLUDES,
   });
   container = requirePackageLock(container, packagePath);
-  container = withNpmAuth(container, options.githubToken, {
+  container = withNpmAuth(container, registryToken, {
     registryScope,
     workspace: DEFAULT_WORKSPACE,
     npmrcPaths: ".",
@@ -599,6 +603,19 @@ async function hourlyRelease(
     ],
   );
 
+  // The organisation's policy checks all evaluate against a linked issue, so a
+  // release pull request needs one or it can never merge. Created before the
+  // pull request so the body can reference it.
+  const issueNumber = await createReleaseIssue(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    nextVersion,
+    options.releaseIssueType ?? "Task 📀",
+    options.releaseIssuePriority ?? "P3",
+    options.priorityFieldId ?? 3129,
+  );
+
   const prUrl = await createReleasePr(
     options.githubToken,
     options.repoOwner,
@@ -613,6 +630,8 @@ async function hourlyRelease(
       `- Tag on merge: \`${tagName}\``,
       "",
       `Publishing happens after merge, from the manifest change on \`${baseBranch}\`.`,
+      "",
+      `Closes #${issueNumber}`,
     ].join("\n"),
   );
 

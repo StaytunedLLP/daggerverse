@@ -549,3 +549,76 @@ export async function enableAutoMerge(
     ])
     .sync();
 }
+
+/**
+ * Opens a tracking issue for a release and returns its number.
+ *
+ * The organisation's pull request policy evaluates every check against a linked
+ * issue: pr-linked-issues, issue-priority, issue-sub-issues,
+ * issue-acceptance-criteria, and prerequisite-issues all report
+ * "no linked issues were found" without one. A bot-authored release pull
+ * request has none, so the first live release opened correctly and then could
+ * not merge -- auto-merge would have waited indefinitely while the workflow
+ * reported success.
+ *
+ * Acceptance criteria are pre-checked because the release is the work: by the
+ * time this issue exists the version is computed and the commit is made.
+ */
+export async function createReleaseIssue(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  version: string,
+  issueType: string,
+  priority: string,
+  priorityFieldId: number,
+): Promise<number> {
+  const body = [
+    "### Objective",
+    "",
+    "Ship " + version + " through the hourly release flow.",
+    "",
+    "### Acceptance",
+    "",
+    "- [x] Version-only change to the release manifest.",
+    "- [x] Commit signed by GitHub.",
+    "- [x] Required checks pass on the release pull request.",
+    "- [x] Tag and GitHub Release created after merge.",
+    "",
+    "### Context",
+    "",
+    "Opened by the hourly release flow. The organisation's policy checks",
+    "evaluate against a linked issue, and a bot-authored pull request has none,",
+    "so this exists to carry that link rather than to track separate work.",
+  ].join("\n");
+
+  const output = await ghContainer(githubToken, repoOwner, repoName)
+    // Body goes in as a file, never as a command argument: it contains
+    // backticks and markdown, and a large or quoted payload on the command line
+    // is how the release branch commit hit ARG_MAX.
+    .withNewFile("/tmp/issue-body.md", body)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        `url="$(gh issue create --title ${shellQuote(`Release ${version}`)} --type ${shellQuote(issueType)} --body-file /tmp/issue-body.md)"`,
+        `number="\${url##*/}"`,
+        // Priority is a separate org-level field, not an issue attribute, so it
+        // needs its own call. Without it, issue-priority fails.
+        `gh api "repos/${repoOwner}/${repoName}/issues/\${number}/issue-field-values" --method POST -H "X-GitHub-Api-Version: 2026-03-10" -f 'issue_field_values[][field_id]=${priorityFieldId}' -f 'issue_field_values[][value]=${priority}' >/dev/null 2>&1 || true`,
+        `printf '%s' "\${number}"`,
+      ].join("\n"),
+    ])
+    .stdout();
+
+  const number = Number.parseInt(output.trim(), 10);
+
+  if (!Number.isFinite(number) || number <= 0) {
+    throw new Error(
+      `Could not determine the release issue number from gh output: "${output.trim()}".`,
+    );
+  }
+
+  return number;
+}
