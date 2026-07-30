@@ -635,8 +635,9 @@ async function hourlyRelease(
     ].join("\n"),
   );
 
+  let autoMergeEnabled = false;
   if (base.autoMergeRequested) {
-    await enableAutoMerge(
+    autoMergeEnabled = await enableAutoMerge(
       options.githubToken,
       options.repoOwner,
       options.repoName,
@@ -647,10 +648,13 @@ async function hourlyRelease(
   return {
     ...base,
     outcome: "opened",
-    reason: `Opened release pull request for ${nextVersion}.`,
+    reason: base.autoMergeRequested && !autoMergeEnabled
+      ? `Opened release pull request for ${nextVersion}. Auto-merge is unavailable in this repository, so it needs a manual merge.`
+      : `Opened release pull request for ${nextVersion}.`,
     prUrl,
     branch,
     commitSha,
+    autoMergeEnabled,
   };
 }
 
