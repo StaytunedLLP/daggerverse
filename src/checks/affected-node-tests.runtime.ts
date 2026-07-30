@@ -343,6 +343,59 @@ function getReverseGraph(graph: PackageGraph): PackageGraph {
   return reverse;
 }
 
+/**
+ * Reports whether a manifest change touched anything other than the version.
+ *
+ * package.json and package-lock.json are treated as infrastructure, because a
+ * dependency or script change really can affect every package. A version bump
+ * cannot: it changes no dependency and no code.
+ *
+ * That distinction matters because the hourly release opens a version-only pull
+ * request, and treating it as infrastructure runs the entire test suite for a
+ * three-line diff. On a shared 7.7 GiB runner that is enough to get the runner
+ * OOM-killed mid-run, which fails the check and blocks the release.
+ *
+ * Conservative by construction: anything that cannot be proven version-only --
+ * an unreadable diff, an added or deleted file, any other changed key -- is
+ * still treated as infrastructure. Under-running checks is worse than
+ * over-running them.
+ */
+function manifestChangeIsVersionOnly(file: string): boolean {
+  const safeBaseRef = assertSafeBaseRef(baseRef);
+
+  for (const range of [`${safeBaseRef}...HEAD`, "HEAD~1"]) {
+    try {
+      const out = execSync(
+        `git diff --unified=0 ${range} -- ${JSON.stringify(file)}`,
+        { stdio: ["ignore", "pipe", "ignore"], encoding: "utf-8" },
+      );
+
+      const changedLines = out
+        .split("\n")
+        .filter(
+          (line) =>
+            (line.startsWith("+") || line.startsWith("-")) &&
+            !line.startsWith("+++") &&
+            !line.startsWith("---"),
+        );
+
+      if (changedLines.length === 0) {
+        continue;
+      }
+
+      // Every changed line must be a version assignment. npm writes the version
+      // in two places in a lockfile, so several lines is normal.
+      return changedLines.every((line) =>
+        /^[+-]\s*"version"\s*:\s*"[^"]*",?\s*$/.test(line),
+      );
+    } catch {
+      // Try the next range.
+    }
+  }
+
+  return false;
+}
+
 function affectedPackages(
   changed: WorkspaceDir[],
   allFiles: string[],
@@ -355,12 +408,12 @@ function affectedPackages(
         !file.startsWith(".github/") &&
         !file.startsWith("dagger/") &&
         (file.includes("tools/scripts/") ||
-          file.endsWith("package.json") ||
           file.endsWith("tsconfig.json") ||
           file.endsWith("yarn.lock") ||
-          file.endsWith("package-lock.json") ||
           file.endsWith("playwright.config.ts") ||
-          file.endsWith("eslint.config.ts")),
+          file.endsWith("eslint.config.ts") ||
+          ((file.endsWith("package.json") || file.endsWith("package-lock.json")) &&
+            !manifestChangeIsVersionOnly(file))),
     );
 
     return infrastructureChanged ? packageNames : [];
