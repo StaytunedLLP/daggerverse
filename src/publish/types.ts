@@ -185,6 +185,12 @@ export interface HourlyReleaseResult {
   branch?: string;
   commitSha?: string;
   autoMergeRequested: boolean;
+  /**
+   * Whether auto-merge was actually enabled. False when the repository has
+   * allow_auto_merge disabled, in which case the release is still correct and
+   * simply needs a manual merge.
+   */
+  autoMergeEnabled?: boolean;
 }
 
 export interface GithubOnlyReleaseResult {

@@ -540,14 +540,32 @@ export async function enableAutoMerge(
   repoOwner: string,
   repoName: string,
   prUrl: string,
-): Promise<void> {
-  await ghContainer(githubToken, repoOwner, repoName)
+): Promise<boolean> {
+  // Reported rather than thrown. By the time this runs the release pull request
+  // exists, so failing the whole action would report a release that did not
+  // happen and leave an orphan pull request behind.
+  //
+  // It genuinely fails: staystack has allow_auto_merge disabled at the
+  // repository level, so `gh pr merge --auto` cannot succeed there no matter
+  // what the token can do. The release is still correct -- it just needs a
+  // human to merge it.
+  const output = await ghContainer(githubToken, repoOwner, repoName)
     .withExec([
       "sh",
       "-c",
-      ["set -eu", `gh pr merge ${shellQuote(prUrl)} --auto --squash`].join("\n"),
+      [
+        "set -eu",
+        `if gh pr merge ${shellQuote(prUrl)} --auto --squash 2>/tmp/err; then`,
+        `  printf 'enabled'`,
+        "else",
+        `  echo "warning: could not enable auto-merge: $(cat /tmp/err)" >&2`,
+        `  printf 'unavailable'`,
+        "fi",
+      ].join("\n"),
     ])
-    .sync();
+    .stdout();
+
+  return output.trim() === "enabled";
 }
 
 /**
