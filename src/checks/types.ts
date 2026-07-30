@@ -14,4 +14,14 @@ export type NodeChecksOptions = {
   base?: string;
   changedFiles?: string;
   nodeMaxOldSpaceMb?: number;
+
+  /**
+   * Whether an affected run expands the changed set through the reverse
+   * dependency graph. Defaults to true, which is pr and main behaviour.
+   *
+   * Set false for the local profile, which reports only the packages whose own
+   * files changed. Ignored when runAffected is false -- a full run has no
+   * changed set to expand.
+   */
+  includeDependents?: boolean;
 };

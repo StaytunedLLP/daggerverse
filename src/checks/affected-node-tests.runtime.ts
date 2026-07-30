@@ -450,7 +450,20 @@ function run(): void {
 
     const files = getDiff();
     const changed = changedPackages(files, workspaceDirs);
-    const affected = affectedPackages(changed, files, packageNames, reverseGraph);
+
+    // The local profile stops at the packages whose own files changed; pr and
+    // main additionally pull in every dependent through the reverse graph. A
+    // developer waiting on their own terminal wants the narrow answer, and the
+    // DAG is what the pull request is for.
+    //
+    // The empty-changed case still goes through affectedPackages either way:
+    // it carries the infrastructure-change fallback, and skipping that would
+    // make a tsconfig or lockfile edit silently select no tests at all.
+    const expandToDependents = process.env.INCLUDE_DEPENDENTS !== "0";
+    const affected =
+      expandToDependents || changed.length === 0
+        ? affectedPackages(changed, files, packageNames, reverseGraph)
+        : packageNames.filter((packageName) => changed.includes(packageName));
 
     // If everything is affected or base config changed, run everything
     const allTests = workspaceDirs.flatMap((dir) => findTestFiles(dir));

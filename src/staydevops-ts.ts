@@ -332,6 +332,57 @@ export class Checks {
       changedFiles: this.changedFiles,
     });
   }
+
+  // The local profile: only the packages whose own files changed, for a
+  // developer waiting on their own terminal. checks-reusable.yml maps
+  // profile local to the -changed suffix and always runs all four names, so
+  // every one of these has to exist even where it does no less work than its
+  // -incremental sibling.
+  //
+  // format and lint genuinely do no less work. Their affected path runs the
+  // repository's own format:incremental / lint:incremental, which filter to
+  // changed files and never consult the dependency graph -- there is nothing
+  // narrower to ask for. They delegate rather than pretending to differ, so
+  // that a future divergence has one obvious place to happen.
+
+  @check()
+  @func({ cache: "never" })
+  async formatChanged(): Promise<void> {
+    await this.formatIncremental();
+  }
+
+  @check()
+  @func({ cache: "never" })
+  async lintChanged(): Promise<void> {
+    await this.lintIncremental();
+  }
+
+  @check()
+  @func({ cache: "never" })
+  async buildChanged(): Promise<void> {
+    await this.buildIncremental();
+  }
+
+  /**
+   * Unlike the other three, this one is genuinely narrower: the affected-test
+   * runtime is the only place the reverse dependency graph is walked, so
+   * suppressing that expansion is what makes the local profile local.
+   */
+  @check()
+  @func({ cache: "never" })
+  async testChanged(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
+      test: true,
+      runAffected: true,
+      testScript: "verify:incremental",
+      base: this.checkBase,
+      changedFiles: this.changedFiles,
+      includeDependents: false,
+    });
+  }
 }
 
 /**
