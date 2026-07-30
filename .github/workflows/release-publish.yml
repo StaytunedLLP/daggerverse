@@ -3,9 +3,13 @@ name: Release Publish
 # The second half of the one release cycle: the hourly job opens a release pull
 # request that moves the manifest, and merging it lands here.
 #
+# Self-contained for the same reason as release-hourly.yml: this repository is
+# public, staydevops is private, and a public repository cannot call a private
+# repository's reusable workflow.
+#
 # Gated on the manifest paths rather than every push to main, so ordinary commits
-# do not attempt a release. The version in package.json is the trigger and the
-# subject at once.
+# do not attempt a release. The version in package.json is both the trigger and
+# the subject.
 
 on:
   push:
@@ -20,19 +24,68 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  # packages: write is required here even though github-only mode never touches a
-  # registry. A reusable workflow cannot be granted more than its caller has, and
-  # release-publish-reusable.yml declares packages: write for the registry modes.
-  # Granting less does not merely drop the scope -- the run fails at startup
-  # before any step executes, which is how this was found the first time.
-  packages: write
+  # write to create the tag and the GitHub Release. No packages scope: this
+  # module is consumed as a git ref, so github-only mode never contacts a
+  # registry.
+  contents: write
 
 jobs:
   publish:
-    uses: staytunedllp/staydevops/.github/workflows/release-publish-reusable.yml@main
-    secrets: inherit
-    with:
-      mode: github-only
-      package_path: .
-      release_branch: main
+    name: Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Dagger CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(jq -r .engineVersion dagger.json)"
+          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
+            echo "::error file=dagger.json::engineVersion is missing or empty."
+            exit 1
+          fi
+          echo "Installing Dagger ${version} from dagger.json"
+
+          INSTALL_DIR="$HOME/.local/bin"
+          mkdir -p "$INSTALL_DIR"
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | DAGGER_VERSION="${version}" BIN_DIR="$INSTALL_DIR" sh
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+      - name: Tag and release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # github-only: create the tag and the GitHub Release, publish nothing
+          # to a registry. Idempotent by design -- an hourly cycle re-runs
+          # against state it may have already produced, and finding the work
+          # already done is success.
+          dagger call release-package \
+            --action=github-only \
+            --source=. \
+            --github-token=env:GITHUB_TOKEN \
+            --repo-owner="${{ github.repository_owner }}" \
+            --repo-name="${{ github.event.repository.name }}" \
+            --package-path=. \
+            | tee /tmp/publish.json
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Release Publish"
+            echo
+            echo '```json'
+            sed -n '/^{/,/^}/p' /tmp/publish.json 2>/dev/null || echo '{}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

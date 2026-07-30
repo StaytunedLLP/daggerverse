@@ -2,23 +2,24 @@ name: Release Hourly
 
 # One release cycle for this repository. Nothing else may cut a release.
 #
-# Until now this repository had no release workflow at all -- every tag was cut
-# by hand, which is how the manifest and the tags drifted apart more than once.
-# The other four repositories release through this same reusable flow; this
-# makes daggerverse the fifth rather than the exception.
+# Deliberately self-contained rather than calling the shared reusable workflows
+# the other four repositories use. This repository is public and staydevops is
+# private, and GitHub will not let a public repository call a reusable workflow
+# from a private one -- the call is rejected at parse time with
+# "error parsing called workflow", before any step runs. The organization-level
+# Actions access setting does not lift that restriction.
 #
-# This repository publishes by tag, not to a registry: consumers load it as
-# `github.com/StaytunedLLP/daggerverse@vX.Y.Z`. So the publish half runs in
-# github-only mode and no registry credential is involved.
+# That is also why this repository never had a release workflow: it structurally
+# could not use the shared ones. The duplication below is the cost of the
+# visibility split, not an oversight.
+#
+# It needs no adapter either way. daggerverse owns releasePackage, so it calls
+# its own module directly rather than loading itself as a dependency.
 
 on:
-  # Schedule intentionally left disabled until the runner pool can absorb it.
-  # Four staggered hourly jobs against three online runners queue indefinitely,
-  # and a release that waits an hour for a runner is not an hourly release.
-  #
-  # To enable: uncomment. :47 is this repository's slot in the stagger --
-  # staylook :07, staystack :17, staydevops :27, gonow.travel :37,
-  # daggerverse :47.
+  # Schedule intentionally left disabled until a dry run has proven the flow and
+  # the runner pool can absorb it. :47 is this repository's slot in the stagger
+  # -- staylook :07, staystack :17, staydevops :27, gonow.travel :37.
   #
   # schedule:
   #   - cron: "47 * * * *"
@@ -27,12 +28,12 @@ on:
       dry_run:
         description: Compute the next release and stop.
         required: false
-        default: false
+        default: true
         type: boolean
       auto_merge:
         description: Ask GitHub to merge the release PR once required checks pass.
         required: false
-        default: true
+        default: false
         type: boolean
 
 concurrency:
@@ -40,19 +41,83 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
-  release:
-    uses: staytunedllp/staydevops/.github/workflows/release-hourly-reusable.yml@main
-    secrets: inherit
-    with:
-      package_path: .
-      release_branch: main
-      # github.event_name rather than a null check on the input: GitHub
-      # expressions coerce null to false, so `inputs.auto_merge == null` is true
-      # when the input is explicitly false, which made auto-merge impossible to
-      # turn off. A scheduled run has no inputs at all, which is what the event
-      # check actually distinguishes.
-      dry_run: ${{ inputs.dry_run || false }}
-      auto_merge: ${{ github.event_name != 'workflow_dispatch' || inputs.auto_merge }}
+  hourly-release:
+    name: Hourly Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Dagger CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Read the version from this repository's own dagger.json, matching
+          # checks.yml. daggerverse is the authority for engineVersion, so a
+          # literal here would be a copy that can disagree with the module.
+          version="$(jq -r .engineVersion dagger.json)"
+          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
+            echo "::error file=dagger.json::engineVersion is missing or empty."
+            exit 1
+          fi
+          echo "Installing Dagger ${version} from dagger.json"
+
+          INSTALL_DIR="$HOME/.local/bin"
+          mkdir -p "$INSTALL_DIR"
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | DAGGER_VERSION="${version}" BIN_DIR="$INSTALL_DIR" sh
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+      - name: Open the hourly release pull request
+        id: release
+        shell: bash
+        env:
+          # GITHUB_TOKEN suffices here, unlike the private repositories.
+          #
+          # Those use a GitHub App token because the release pull request must
+          # be merged by automation, and GitHub suppresses workflow triggers on
+          # commits made with GITHUB_TOKEN -- the merge would land without the
+          # publish workflow ever firing. This repository publishes by tag
+          # through release-publish.yml, which is triggered by the manifest path
+          # rather than by a downstream workflow, so the suppression does not
+          # apply.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dagger call release-package \
+            --action=hourly-release \
+            --source=. \
+            --github-token=env:GITHUB_TOKEN \
+            --repo-owner="${{ github.repository_owner }}" \
+            --repo-name="${{ github.event.repository.name }}" \
+            --package-path=. \
+            --base-branch=main \
+            --dry-run=${{ inputs.dry_run }} \
+            --auto-merge=${{ inputs.auto_merge }} \
+            | tee /tmp/release.json
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Hourly Release"
+            echo
+            echo '```json'
+            # sed rather than jq: the module prints its result as a JSON object
+            # amid progress output, and this extracts it without a parser that
+            # would fail the step on unrelated log noise.
+            sed -n '/^{/,/^}/p' /tmp/release.json 2>/dev/null || echo '{}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
