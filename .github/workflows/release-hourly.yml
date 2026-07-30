@@ -21,8 +21,8 @@ on:
   # the runner pool can absorb it. :47 is this repository's slot in the stagger
   # -- staylook :07, staystack :17, staydevops :27, gonow.travel :37.
   #
-  # schedule:
-  #   - cron: "47 * * * *"
+  schedule:
+    - cron: "47 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -94,6 +94,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+
+          # A scheduled run carries no inputs at all, so a bare `inputs.dry_run`
+          # renders empty and the flag arrives as `--dry-run=` with no value.
+          # `|| false` supplies the scheduled default; an explicit false from a
+          # dispatch still evaluates to false, so this does not override the
+          # operator.
+          #
+          # auto-merge uses github.event_name rather than a null check, because
+          # GitHub coerces null to false: `inputs.auto_merge == null` is also
+          # true when the input is explicitly false, which is what previously
+          # made auto-merge impossible to turn off.
+          #
+          # Both are assigned before the command rather than inline: these lines
+          # are shell, and a comment between backslash-continued arguments would
+          # comment out the remainder of the command.
+          dry_run="${{ inputs.dry_run || false }}"
+          auto_merge="${{ github.event_name != 'workflow_dispatch' || inputs.auto_merge }}"
+
           dagger call release-package \
             --action=hourly-release \
             --source=. \
@@ -102,8 +120,8 @@ jobs:
             --repo-name="${{ github.event.repository.name }}" \
             --package-path=. \
             --base-branch=main \
-            --dry-run=${{ inputs.dry_run }} \
-            --auto-merge=${{ inputs.auto_merge }} \
+            --dry-run="${dry_run}" \
+            --auto-merge="${auto_merge}" \
             | tee /tmp/release.json
 
       - name: Summary
