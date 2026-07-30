@@ -1,0 +1,58 @@
+name: Release Hourly
+
+# One release cycle for this repository. Nothing else may cut a release.
+#
+# Until now this repository had no release workflow at all -- every tag was cut
+# by hand, which is how the manifest and the tags drifted apart more than once.
+# The other four repositories release through this same reusable flow; this
+# makes daggerverse the fifth rather than the exception.
+#
+# This repository publishes by tag, not to a registry: consumers load it as
+# `github.com/StaytunedLLP/daggerverse@vX.Y.Z`. So the publish half runs in
+# github-only mode and no registry credential is involved.
+
+on:
+  # Schedule intentionally left disabled until the runner pool can absorb it.
+  # Four staggered hourly jobs against three online runners queue indefinitely,
+  # and a release that waits an hour for a runner is not an hourly release.
+  #
+  # To enable: uncomment. :47 is this repository's slot in the stagger --
+  # staylook :07, staystack :17, staydevops :27, gonow.travel :37,
+  # daggerverse :47.
+  #
+  # schedule:
+  #   - cron: "47 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Compute the next release and stop.
+        required: false
+        default: false
+        type: boolean
+      auto_merge:
+        description: Ask GitHub to merge the release PR once required checks pass.
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: release-hourly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: staytunedllp/staydevops/.github/workflows/release-hourly-reusable.yml@main
+    secrets: inherit
+    with:
+      package_path: .
+      release_branch: main
+      # github.event_name rather than a null check on the input: GitHub
+      # expressions coerce null to false, so `inputs.auto_merge == null` is true
+      # when the input is explicitly false, which made auto-merge impossible to
+      # turn off. A scheduled run has no inputs at all, which is what the event
+      # check actually distinguishes.
+      dry_run: ${{ inputs.dry_run || false }}
+      auto_merge: ${{ github.event_name != 'workflow_dispatch' || inputs.auto_merge }}

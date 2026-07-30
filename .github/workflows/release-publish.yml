@@ -1,0 +1,38 @@
+name: Release Publish
+
+# The second half of the one release cycle: the hourly job opens a release pull
+# request that moves the manifest, and merging it lands here.
+#
+# Gated on the manifest paths rather than every push to main, so ordinary commits
+# do not attempt a release. The version in package.json is the trigger and the
+# subject at once.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+concurrency:
+  group: release-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # packages: write is required here even though github-only mode never touches a
+  # registry. A reusable workflow cannot be granted more than its caller has, and
+  # release-publish-reusable.yml declares packages: write for the registry modes.
+  # Granting less does not merely drop the scope -- the run fails at startup
+  # before any step executes, which is how this was found the first time.
+  packages: write
+
+jobs:
+  publish:
+    uses: staytunedllp/staydevops/.github/workflows/release-publish-reusable.yml@main
+    secrets: inherit
+    with:
+      mode: github-only
+      package_path: .
+      release_branch: main
