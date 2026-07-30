@@ -172,7 +172,14 @@ export async function runNodeChecks(
     // available to consumer `*:incremental` scripts.
     workspace = workspace
       .withEnvVariable("CHANGED_FILES", options.changedFiles ?? "")
-      .withEnvVariable("BASE_REF", options.base ?? "");
+      .withEnvVariable("BASE_REF", options.base ?? "")
+      // Read by the affected-selection runtime. Only "0" narrows the selection,
+      // so an unset or malformed value keeps the pr/main behaviour rather than
+      // quietly shrinking what a pull request tests.
+      .withEnvVariable(
+        "INCLUDE_DEPENDENTS",
+        options.includeDependents === false ? "0" : "1",
+      );
   }
 
   for (const packagePath of packagePaths) {
