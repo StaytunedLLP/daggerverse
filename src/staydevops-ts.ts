@@ -9,6 +9,7 @@ import {
   func,
   object,
 } from "@dagger.io/dagger";
+import { changedBetween } from "#checks/git-changed.js";
 import { checkPrTitleFromEvent } from "#checks/pr-checks.js";
 import {
   deleteFirebaseApphostingBackend,
@@ -157,13 +158,17 @@ export class Checks {
     nodeAuthToken?: Secret,
     runAffected = false,
   ): Promise<void> {
-    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
-      packagePaths: this.packagePaths,
-      registryScope: this.registryScope,
-      nodeMaxOldSpaceMb: this.heap,
-      format: true,
-      runAffected,
-    });
+    await runNodeChecks(
+      this.resolveSource(source),
+      this.resolveNodeAuthToken(nodeAuthToken),
+      {
+        packagePaths: this.packagePaths,
+        registryScope: this.registryScope,
+        nodeMaxOldSpaceMb: this.heap,
+        format: true,
+        runAffected,
+      },
+    );
   }
 
   @check()
@@ -202,13 +207,17 @@ export class Checks {
     nodeAuthToken?: Secret,
     runAffected = false,
   ): Promise<void> {
-    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
-      packagePaths: this.packagePaths,
-      registryScope: this.registryScope,
-      nodeMaxOldSpaceMb: this.heap,
-      lint: true,
-      runAffected,
-    });
+    await runNodeChecks(
+      this.resolveSource(source),
+      this.resolveNodeAuthToken(nodeAuthToken),
+      {
+        packagePaths: this.packagePaths,
+        registryScope: this.registryScope,
+        nodeMaxOldSpaceMb: this.heap,
+        lint: true,
+        runAffected,
+      },
+    );
   }
 
   @check()
@@ -246,13 +255,17 @@ export class Checks {
     source: Directory,
     nodeAuthToken?: Secret,
   ): Promise<void> {
-    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
-      packagePaths: this.packagePaths,
-      registryScope: this.registryScope,
-      nodeMaxOldSpaceMb: this.heap,
-      build: true,
-      runAffected: false,
-    });
+    await runNodeChecks(
+      this.resolveSource(source),
+      this.resolveNodeAuthToken(nodeAuthToken),
+      {
+        packagePaths: this.packagePaths,
+        registryScope: this.registryScope,
+        nodeMaxOldSpaceMb: this.heap,
+        build: true,
+        runAffected: false,
+      },
+    );
   }
 
   @check()
@@ -306,16 +319,20 @@ export class Checks {
     base = "origin/main",
     changedFiles = "",
   ): Promise<void> {
-    await runNodeChecks(this.resolveSource(source), this.resolveNodeAuthToken(nodeAuthToken), {
-      packagePaths: this.packagePaths,
-      registryScope: this.registryScope,
-      nodeMaxOldSpaceMb: this.heap,
-      test: true,
-      runAffected,
-      testScript,
-      base,
-      changedFiles,
-    });
+    await runNodeChecks(
+      this.resolveSource(source),
+      this.resolveNodeAuthToken(nodeAuthToken),
+      {
+        packagePaths: this.packagePaths,
+        registryScope: this.registryScope,
+        nodeMaxOldSpaceMb: this.heap,
+        test: true,
+        runAffected,
+        testScript,
+        base,
+        changedFiles,
+      },
+    );
   }
 
   @check()
@@ -382,6 +399,43 @@ export class Checks {
       changedFiles: this.changedFiles,
       includeDependents: false,
     });
+  }
+
+  /**
+   * Resolve the changed set from git, inside the engine.
+   *
+   * Returns JSON: added, modified, removed, and present (added + modified).
+   *
+   * The caller currently computes this on the host and passes a comma-joined
+   * string. That string has to travel through a Dagger local default, where
+   * `env://` is a *secret provider* URI -- it resolves for Secret arguments and
+   * passes through verbatim for plain strings. The changed set is a string, so
+   * it arrived as the literal "env://CHANGED_FILES" and every consumer failed
+   * silently: the scoped scripts filtered the phantom path out and reported
+   * "no changes -- skip", while staytest read it as a root-level change and
+   * escalated to every package.
+   *
+   * Resolving here makes it a typed value that cannot quietly be the wrong
+   * thing, needs no `.git` in the check container, and is cached on the commit
+   * digests.
+   *
+   * Removed paths are reported but kept out of `present`, because prettier and
+   * eslint error on a path that is not on disk. They are still worth surfacing:
+   * the shell resolvers drop deletions entirely, so a delete-only change gets
+   * no scoped checking at all.
+   *
+   * @example
+   * dagger call checks changed-from-git --url https://github.com/o/r --base origin/main
+   */
+  @func()
+  async changedFromGit(
+    url: string,
+    base = "origin/main",
+    head?: string,
+    token?: Secret,
+  ): Promise<string> {
+    const set = await changedBetween({ url, base, head, token });
+    return JSON.stringify(set, null, 2);
   }
 }
 
