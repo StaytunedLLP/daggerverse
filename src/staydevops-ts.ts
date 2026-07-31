@@ -402,6 +402,76 @@ export class Checks {
   }
 
   /**
+   * All four checks against one prepared workspace.
+   *
+   * The workflow runs `dagger check` once per check, so each of format, lint,
+   * test and build materialises the workspace from scratch. Measured on
+   * staystack: format alone cost 109s while checking nothing, and 95s while
+   * checking two files -- almost all of it workspace setup rather than
+   * checking. Four checks pay that four times.
+   *
+   * runNodeChecks already accepts every check in a single call and runs them as
+   * sequential execs on one container, so the waste was never in the module. It
+   * was in invoking the module four times.
+   *
+   * The trade is granularity: one check result in the UI instead of four. The
+   * failing phase is still named in the log, and the order is cheapest first --
+   * format, lint, test, build -- so a formatting slip still surfaces before the
+   * long phases run.
+   */
+  @check()
+  @func({ cache: "never" })
+  async allIncremental(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
+      format: true,
+      lint: true,
+      test: true,
+      build: true,
+      runAffected: true,
+      base: this.checkBase,
+      changedFiles: this.changedFiles,
+    });
+  }
+
+  /** All four checks, full scope, against one prepared workspace. */
+  @check()
+  @func({ cache: "never" })
+  async allFull(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
+      format: true,
+      lint: true,
+      test: true,
+      build: true,
+      runAffected: false,
+    });
+  }
+
+  /** All four checks, changed scope, against one prepared workspace. */
+  @check()
+  @func({ cache: "never" })
+  async allChanged(): Promise<void> {
+    await runNodeChecks(this.resolveSource(), this.resolveNodeAuthToken(), {
+      packagePaths: this.packagePaths,
+      registryScope: this.registryScope,
+      nodeMaxOldSpaceMb: this.heap,
+      format: true,
+      lint: true,
+      test: true,
+      build: true,
+      runAffected: true,
+      base: this.checkBase,
+      changedFiles: this.changedFiles,
+      includeDependents: false,
+    });
+  }
+
+  /**
    * Resolve the changed set from git, inside the engine.
    *
    * Returns JSON: added, modified, removed, and present (added + modified).
