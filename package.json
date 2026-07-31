@@ -32,7 +32,9 @@
     "format:incremental": "echo 'No incremental format check required for daggerverse'",
     "test": "echo 'No tests defined for daggerverse'",
     "verify:incremental": "npm run build",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build",
+    "build:local": "npm run build",
+    "check:local": "npm run build:local"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
