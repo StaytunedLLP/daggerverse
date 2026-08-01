@@ -4,6 +4,7 @@ import {
   checkRegistryVersion,
   checkReleaseExists,
   checkTagExists,
+  countReleasableCommits,
   createGithubRelease,
   createReleaseBranchWithCommit,
   createReleaseIssue,
@@ -63,11 +64,15 @@ function resolveRegistryScope(
 }
 
 function packageWorkspacePath(packagePath: string): string {
-  return packagePath === "." ? SYNC_WORKSPACE : path.posix.join(SYNC_WORKSPACE, packagePath);
+  return packagePath === "."
+    ? SYNC_WORKSPACE
+    : path.posix.join(SYNC_WORKSPACE, packagePath);
 }
 
 function packageRepoPath(packagePath: string): string {
-  return packagePath === "." ? GIT_REPO_ROOT : path.posix.join(GIT_REPO_ROOT, packagePath);
+  return packagePath === "."
+    ? GIT_REPO_ROOT
+    : path.posix.join(GIT_REPO_ROOT, packagePath);
 }
 
 async function pushUpdatedPackageFiles(
@@ -77,17 +82,21 @@ async function pushUpdatedPackageFiles(
   commitMessage: string,
 ): Promise<{ commitSha: string }> {
   if (!options.prBranch) {
-    throw new Error("prBranch is required when committing the PR version bump.");
+    throw new Error(
+      "prBranch is required when committing the PR version bump.",
+    );
   }
 
   const packagePath = options.packagePath ?? ".";
   const repoPath = packageRepoPath(packagePath);
-  const packageJsonPath = packagePath === "."
-    ? "package.json"
-    : path.posix.join(packagePath, "package.json");
-  const packageLockPath = packagePath === "."
-    ? "package-lock.json"
-    : path.posix.join(packagePath, "package-lock.json");
+  const packageJsonPath =
+    packagePath === "."
+      ? "package.json"
+      : path.posix.join(packagePath, "package.json");
+  const packageLockPath =
+    packagePath === "."
+      ? "package-lock.json"
+      : path.posix.join(packagePath, "package-lock.json");
   const updatedFilter = {
     include: [packageJsonPath, packageLockPath],
   };
@@ -174,7 +183,11 @@ async function syncPrVersion(
   );
   const manifest = await readPackageJsonAtPath(options.source, packagePath);
 
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  await ensureFileExistsAtPath(
+    options.source,
+    packagePath,
+    "package-lock.json",
+  );
   parseExactVersion(mainManifest.version);
   parseExactVersion(manifest.version);
 
@@ -198,7 +211,9 @@ async function syncPrVersion(
     workspace: SYNC_WORKSPACE,
     packagePaths: packagePath,
   });
-  container = requirePackageLock(container, packagePath, { workspace: SYNC_WORKSPACE });
+  container = requirePackageLock(container, packagePath, {
+    workspace: SYNC_WORKSPACE,
+  });
   container = container.withExec([
     "bash",
     "-lc",
@@ -240,7 +255,11 @@ async function publishRelease(
     options.registryScope,
   );
 
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  await ensureFileExistsAtPath(
+    options.source,
+    packagePath,
+    "package-lock.json",
+  );
   parseExactVersion(manifest.version);
 
   const tagName = `v${manifest.version}`;
@@ -354,7 +373,7 @@ async function publishRelease(
     [
       STRICT_SHELL_HEADER,
       `package_dir=${shellQuote(path.posix.join(DEFAULT_WORKSPACE, packagePath))}`,
-      "mkdir -p \"$package_dir\"",
+      'mkdir -p "$package_dir"',
       "cat > \"$package_dir/.npmrc\" <<'EOF'",
       "registry=https://npm.pkg.github.com",
       `@${registryScope}:registry=https://npm.pkg.github.com`,
@@ -415,13 +434,18 @@ async function prepareHourlyRelease(
   // Reject a non-exact version before computing anything from it. A range or
   // prerelease here would produce a nonsense tag.
   parseExactVersion(manifest.version);
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  await ensureFileExistsAtPath(
+    options.source,
+    packagePath,
+    "package-lock.json",
+  );
 
   const nextVersion = nextPatchVersion(manifest.version);
   const tagName = `v${nextVersion}`;
 
-  // If the tag this run would produce already exists, the previous hour's
-  // release landed and nothing new has been merged since.
+  // Guard one: the tag this run would produce already exists. That is the
+  // repair case -- a release was cut but the manifest never moved -- not the
+  // ordinary one.
   const alreadyReleased = await checkTagExists(
     options.githubToken,
     options.repoOwner,
@@ -438,6 +462,39 @@ async function prepareHourlyRelease(
       tagName,
       releaseNeeded: false,
       reason: `Tag ${tagName} already exists; nothing to release.`,
+    };
+  }
+
+  // Guard two, and the one that actually decides most hours: has anything
+  // landed since the last release?
+  //
+  // This used to be inferred from the absence of the *next* tag, which is a
+  // question whose answer is almost always no -- so every hour looked like it
+  // had work, and produced a release whose only content was its own version
+  // bump. daggerverse v1.12.2 contained exactly one commit: the commit that
+  // created it. Each of those also spends a full check run on a runner pool
+  // that is not keeping up as it is.
+  const currentTag = `v${manifest.version}`;
+  const releasableCommits = await countReleasableCommits(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    currentTag,
+    options.baseBranch ?? "main",
+  );
+
+  // null means the comparison could not be made -- no previous tag, or an
+  // unreadable response. Release in that case: refusing on a failed lookup
+  // would stall the train silently, which is the worse of the two mistakes.
+  if (releasableCommits === 0) {
+    return {
+      action: "prepare-hourly-release",
+      packageName: manifest.name,
+      currentVersion: manifest.version,
+      nextVersion,
+      tagName,
+      releaseNeeded: false,
+      reason: `No commits on ${options.baseBranch ?? "main"} since ${currentTag}; nothing to release.`,
     };
   }
 
@@ -494,7 +551,11 @@ async function hourlyRelease(
   const manifest = await readPackageJsonAtPath(options.source, packagePath);
 
   parseExactVersion(manifest.version);
-  await ensureFileExistsAtPath(options.source, packagePath, "package-lock.json");
+  await ensureFileExistsAtPath(
+    options.source,
+    packagePath,
+    "package-lock.json",
+  );
 
   const nextVersion = nextPatchVersion(manifest.version);
   const tagName = `v${nextVersion}`;
@@ -583,10 +644,7 @@ async function hourlyRelease(
     };
   }
 
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .slice(0, 10);
+  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 10);
   const branch = `${RELEASE_BRANCH_PREFIX}${stamp}`;
   const message = `chore(release): hourly v${nextVersion}`;
 
@@ -598,7 +656,10 @@ async function hourlyRelease(
     baseBranch,
     message,
     [
-      { path: manifestFile, contents: `${JSON.stringify(manifestJson, null, 2)}\n` },
+      {
+        path: manifestFile,
+        contents: `${JSON.stringify(manifestJson, null, 2)}\n`,
+      },
       { path: lockFile, contents: `${JSON.stringify(lockJson, null, 2)}\n` },
     ],
   );
@@ -648,9 +709,10 @@ async function hourlyRelease(
   return {
     ...base,
     outcome: "opened",
-    reason: base.autoMergeRequested && !autoMergeEnabled
-      ? `Opened release pull request for ${nextVersion}. Auto-merge is unavailable in this repository, so it needs a manual merge.`
-      : `Opened release pull request for ${nextVersion}.`,
+    reason:
+      base.autoMergeRequested && !autoMergeEnabled
+        ? `Opened release pull request for ${nextVersion}. Auto-merge is unavailable in this repository, so it needs a manual merge.`
+        : `Opened release pull request for ${nextVersion}.`,
     prUrl,
     branch,
     commitSha,
