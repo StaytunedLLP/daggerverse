@@ -34,7 +34,9 @@ export async function readPackageJsonAtPath(
   let content: string;
 
   try {
-    content = await source.file(packageFilePath(packagePath, "package.json")).contents();
+    content = await source
+      .file(packageFilePath(packagePath, "package.json"))
+      .contents();
   } catch {
     throw new Error(
       `Missing package.json in the source directory at "${packagePath}".`,
@@ -221,9 +223,7 @@ export async function readBaseBranchPackageJson(
     typeof (manifest as Partial<PackageManifest>).version !== "string" ||
     (manifest as Partial<PackageManifest>).version?.trim().length === 0
   ) {
-    throw new Error(
-      `Invalid package.json in base branch at "${packagePath}".`,
-    );
+    throw new Error(`Invalid package.json in base branch at "${packagePath}".`);
   }
 
   const typedManifest = manifest as Partial<PackageManifest>;
@@ -305,6 +305,66 @@ async function ghQuery(
 /**
  * Reports whether a git tag already exists on the remote.
  */
+/**
+ * Matches the commit the release flow itself creates, so it is not counted as a
+ * reason to cut another release.
+ */
+const RELEASE_COMMIT_PATTERN = /^chore\(release\):/i;
+
+/**
+ * Counts commits on the release branch that are not release commits themselves.
+ *
+ * The hourly flow needs to answer "has anything landed since the last release",
+ * and the obvious proxies do not. Checking whether the *next* tag exists asks a
+ * question whose answer is almost always no, so every hour looked like it had
+ * work to do; the result was a stream of releases whose only content was their
+ * own version bump -- v1.12.2 contained exactly one commit, the commit that
+ * created it.
+ *
+ * Release commits are excluded by message, because counting them means the
+ * previous bump reads as a change and the loop simply moves one step along.
+ *
+ * Returns null when the comparison cannot be made -- no previous tag, or an
+ * unreadable response. The caller treats that as "release", because refusing to
+ * release on a failed lookup would stall the train silently, which is the worse
+ * of the two mistakes.
+ */
+export async function countReleasableCommits(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  fromRef: string,
+  toRef: string,
+): Promise<number | null> {
+  const out = await ghQuery(
+    githubToken,
+    repoOwner,
+    repoName,
+    // --paginate so a busy hour is not truncated at the default page size.
+    // One line per commit: the subject only. A full message carries trailers
+    // such as Co-authored-by, and splitting the response on newlines would count
+    // each trailer as its own commit -- which fails the release-commit test, so a
+    // release whose only content was its own bump still looked releasable.
+    `gh api --paginate "repos/${repoOwner}/${repoName}/compare/${fromRef}...${toRef}" --jq '.commits[].commit.message | split("\\n")[0]' 2>/dev/null || true`,
+  );
+
+  if (!out) {
+    return null;
+  }
+
+  const messages = out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (messages.length === 0) {
+    return 0;
+  }
+
+  return messages.filter((message) => !RELEASE_COMMIT_PATTERN.test(message))
+    .length;
+}
+
 export async function checkTagExists(
   githubToken: Secret,
   repoOwner: string,
@@ -384,11 +444,7 @@ export async function createGithubRelease(
  * Separate from ghQuery: that one swallows failures because a missing tag is a
  * legitimate answer. Anything that mutates has to surface its error instead.
  */
-function ghContainer(
-  githubToken: Secret,
-  repoOwner: string,
-  repoName: string,
-) {
+function ghContainer(githubToken: Secret, repoOwner: string, repoName: string) {
   return dag
     .container()
     .from("alpine/git:latest")
