@@ -792,9 +792,33 @@ async function githubOnlyRelease(
  * mutate remote state and are idempotent, so an hourly schedule can re-run
  * them safely.
  */
+/**
+ * The only organisation this module may release for.
+ *
+ * Every action here creates tags, GitHub Releases and registry packages using
+ * repoOwner, which arrives as a plain string from the caller's workflow --
+ * `github.repository_owner`. That is trustworthy in this organisation's own
+ * workflows and is not trustworthy in general: a fork, a copied workflow, or a
+ * mistyped input would point the whole release machinery, holding a token that
+ * can write tags and packages, at a repository nobody intended.
+ *
+ * Refusing anything else costs nothing here and makes the blast radius of a
+ * wrong owner a failed run rather than a release somewhere else.
+ */
+const ALLOWED_REPO_OWNER = "StaytunedLLP";
+
 export async function releasePackage(
   options: ReleasePackageOptions,
 ): Promise<string> {
+  // Checked once, at the single entry point every action passes through,
+  // rather than in each of them.
+  if (options.repoOwner !== ALLOWED_REPO_OWNER) {
+    throw new Error(
+      `Refusing to release for owner "${options.repoOwner}": this module only releases for ${ALLOWED_REPO_OWNER}. ` +
+        "If the organisation has genuinely changed, change ALLOWED_REPO_OWNER deliberately rather than passing a different value.",
+    );
+  }
+
   let result: ReleasePackageResult;
 
   switch (options.action) {
