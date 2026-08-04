@@ -345,24 +345,38 @@ export async function countReleasableCommits(
     // such as Co-authored-by, and splitting the response on newlines would count
     // each trailer as its own commit -- which fails the release-commit test, so a
     // release whose only content was its own bump still looked releasable.
-    `gh api --paginate "repos/${repoOwner}/${repoName}/compare/${fromRef}...${toRef}" --jq '.commits[].commit.message | split("\\n")[0]' 2>/dev/null || true`,
+    // A count line first, then one subject per commit. Without the count,
+    // zero commits and a failed call are the same empty string, and this
+    // cannot tell "nothing to release" from "could not tell" -- it defaulted
+    // to releasing, so the one case the guard exists to catch was the case it
+    // let through.
+    `gh api --paginate "repos/${repoOwner}/${repoName}/compare/${fromRef}...${toRef}" --jq '"COUNT:" + (.commits | length | tostring), (.commits[].commit.message | split("\\n")[0])' 2>/dev/null || true`,
   );
 
-  if (!out) {
-    return null;
-  }
-
-  const messages = out
+  const lines = out
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  if (messages.length === 0) {
+  const countLine = lines.find((line) => line.startsWith("COUNT:"));
+  if (!countLine) {
+    // No count means the call did not answer at all. Distinct from a count of
+    // zero, and the caller treats it as "release" rather than stalling the
+    // train on an unreadable response.
+    return null;
+  }
+
+  const total = Number.parseInt(countLine.slice("COUNT:".length), 10);
+  if (!Number.isFinite(total)) {
+    return null;
+  }
+  if (total === 0) {
     return 0;
   }
 
-  return messages.filter((message) => !RELEASE_COMMIT_PATTERN.test(message))
-    .length;
+  return lines
+    .filter((line) => line !== countLine)
+    .filter((message) => !RELEASE_COMMIT_PATTERN.test(message)).length;
 }
 
 export async function checkTagExists(
