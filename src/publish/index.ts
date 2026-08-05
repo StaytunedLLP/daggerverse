@@ -614,6 +614,39 @@ async function hourlyRelease(
     };
   }
 
+  // Guard two, and the one that decides most hours: has anything actually
+  // landed since the last release?
+  //
+  // Guard one asks whether the *next* tag exists, a question whose answer is
+  // almost always no -- so every hour looked like it had work and produced a
+  // release whose only content was its own version bump. #209 was exactly
+  // that: one commit, the bump that created it.
+  //
+  // This same guard sat in prepareHourlyRelease across three attempted fixes
+  // and never executed once, because every workflow passes
+  // --action=hourly-release, which lands here instead. A guard in a function
+  // nothing calls is indistinguishable from no guard at all -- and it reads as
+  // fixed, which is worse.
+  const currentTag = `v${manifest.version}`;
+  const releasableCommits = await countReleasableCommits(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    currentTag,
+    baseBranch,
+  );
+
+  // null means the comparison could not be made -- no previous tag, or an
+  // unreadable response. Release in that case: refusing on a failed lookup
+  // would stall the train silently, which is the worse of the two mistakes.
+  if (releasableCommits === 0) {
+    return {
+      ...base,
+      outcome: "nothing-to-release",
+      reason: `No commits on ${baseBranch} since ${currentTag}; nothing to release.`,
+    };
+  }
+
   const manifestFile = packageFilePath(packagePath, "package.json");
   const lockFile = packageFilePath(packagePath, "package-lock.json");
 
