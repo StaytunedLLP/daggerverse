@@ -48,6 +48,11 @@ permissions:
 jobs:
   hourly-release:
     name: Hourly Release
+    # StaytunedLLP only. A fork inherits this workflow verbatim, and a scheduled
+    # or dispatched run there would act on the fork's own repository. The module
+    # refuses a foreign owner too, but only after a runner has been claimed, the
+    # repository checked out and a Dagger engine started -- this refuses first.
+    if: github.repository_owner == 'StaytunedLLP'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
