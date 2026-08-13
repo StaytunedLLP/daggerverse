@@ -102,6 +102,24 @@ export interface ReleasePackageOptions {
    * success.
    */
   stalePrHours?: number;
+
+  /**
+   * Commit the version bump straight onto the base branch instead of opening a
+   * release pull request.
+   *
+   * The pull-request path needs a human every hour: a release touches
+   * package.json, CODEOWNERS assigns `*.json` to a team, and a GitHub App can
+   * never satisfy `require_code_owner_review` because apps cannot be code
+   * owners. Granting the app a ruleset bypass did not help either -- auto-merge
+   * evaluates the requirements as written. Pushing directly avoids the question
+   * rather than trying to route around it, and lets code-owner review stay fully
+   * enforced on every *other* pull request.
+   *
+   * Only safe because the push is gated on the base branch's own required
+   * checks and made conditional on its head sha. See `readBranchGreenState` and
+   * `commitOnBranch`.
+   */
+  directPush?: boolean;
 }
 
 export interface PackageManifest {
@@ -172,14 +190,30 @@ export interface HourlyReleaseResult {
   nextVersion: string;
   tagName: string;
   /**
-   * skipped-in-flight, nothing-to-release, dry-run, or opened. The caller
-   * renders this rather than inferring intent from which fields are set.
+   * The caller renders this rather than inferring intent from which fields are
+   * set.
+   *
+   * The first four belong to the pull-request path. The rest belong to the
+   * direct-push path:
+   *
+   * - `pushed` -- the version bump is on the base branch; publish takes over.
+   * - `skipped-not-green` -- the base branch did not pass its required checks,
+   *   so nothing was written. Fail-closed by design.
+   * - `skipped-branch-moved` -- something landed between reading the branch and
+   *   committing, so the conditional write was rejected. Next run picks it up.
+   * - `repair-dispatched` -- the manifest was bumped previously but the tag
+   *   never appeared. Publish was dispatched for the *current* version rather
+   *   than bumping past it, which would strand that version permanently.
    */
   outcome:
     | "skipped-in-flight"
     | "nothing-to-release"
     | "dry-run"
-    | "opened";
+    | "opened"
+    | "pushed"
+    | "skipped-not-green"
+    | "skipped-branch-moved"
+    | "repair-dispatched";
   reason: string;
   prUrl?: string;
   branch?: string;
