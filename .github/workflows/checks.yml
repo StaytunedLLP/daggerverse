@@ -86,8 +86,7 @@ jobs:
     name: ODS Document Integrity Gate
     uses: open-doc-spec/ods-action/.github/workflows/ods.yml@main
     with:
-      runs-on: 'ubuntu-latest'
-      path: '.'
+      runs-on: "ubuntu-latest"
+      path: "."
       doctor: true
       strict-fmt: true
-
