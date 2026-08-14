@@ -944,7 +944,6 @@ export class StaydevopsTs {
     dryRun = false,
     autoMerge = true,
     stalePrHours = 6,
-    directPush = false,
   ): Promise<string> {
     const supported = [
       "sync-pr-version",
@@ -974,7 +973,6 @@ export class StaydevopsTs {
       dryRun,
       autoMerge,
       stalePrHours,
-      directPush,
     });
   }
 }

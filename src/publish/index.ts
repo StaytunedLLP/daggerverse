@@ -4,7 +4,6 @@ import {
   checkRegistryVersion,
   checkReleaseExists,
   checkTagExists,
-  commitOnBranch,
   countReleasableCommits,
   dispatchWorkflow,
   createGithubRelease,
@@ -19,7 +18,6 @@ import {
   compareVersions,
   nextPatchVersion,
   parseExactVersion,
-  readBranchGreenState,
   readPackageJsonAtPath,
   readBaseBranchPackageJson,
   validateRegistryScope,
@@ -635,17 +633,12 @@ async function hourlyRelease(
   // A release already in flight. Exiting successfully is correct -- but only
   // while it is progressing, so an old one becomes a hard failure rather than a
   // silent halt.
-  //
-  // Only meaningful on the pull-request path; the direct-push path never opens
-  // one, so there is nothing to be in flight.
-  const inFlight = options.directPush
-    ? null
-    : await findOpenReleasePr(
-        options.githubToken,
-        options.repoOwner,
-        options.repoName,
-        RELEASE_BRANCH_PREFIX,
-      );
+  const inFlight = await findOpenReleasePr(
+    options.githubToken,
+    options.repoOwner,
+    options.repoName,
+    RELEASE_BRANCH_PREFIX,
+  );
 
   if (inFlight) {
     if (inFlight.ageHours >= staleHours) {
@@ -740,30 +733,7 @@ async function hourlyRelease(
     lockJson.packages[""].version = nextVersion;
   }
 
-  // Evaluated before the dry-run return, deliberately.
-  //
-  // A dry run that skipped the safety check would report "would release" for a
-  // branch it is not actually allowed to push to, which is the one question a
-  // dry run of this path exists to answer.
-  const greenState = options.directPush
-    ? await readBranchGreenState(
-        options.githubToken,
-        options.repoOwner,
-        options.repoName,
-        baseBranch,
-      )
-    : null;
-
   if (options.dryRun) {
-    if (greenState) {
-      return {
-        ...base,
-        outcome: "dry-run",
-        reason: greenState.green
-          ? `Would commit ${nextVersion} to ${baseBranch}@${greenState.sha.slice(0, 8)} (${greenState.reason})`
-          : `Would refuse: ${baseBranch} is not releasable -- ${greenState.reason}`,
-      };
-    }
     return {
       ...base,
       outcome: "dry-run",
@@ -779,64 +749,6 @@ async function hourlyRelease(
     { path: lockFile, contents: `${JSON.stringify(lockJson, null, 2)}\n` },
   ];
   const releaseMessage = `chore(release): hourly v${nextVersion}`;
-
-  // Direct-push path: commit the bump straight onto the base branch.
-  //
-  // The pull-request path cannot complete unattended. A release touches
-  // package.json, CODEOWNERS assigns `*.json` to a team, and a GitHub App can
-  // never satisfy require_code_owner_review because apps cannot be code owners.
-  // Adding the app as a ruleset bypass actor did not help: auto-merge evaluates
-  // the requirements as written, so the pull request simply sat there. Pushing
-  // directly sidesteps the question instead of routing around it, and lets
-  // code-owner review stay fully enforced on every other pull request.
-  //
-  // Two conditions make that safe, and both are required:
-  //
-  //  1. The branch must already be passing its own required checks. Without a
-  //     pull request there is nothing else between this bump and the branch.
-  //  2. The commit is conditional on the exact sha that was checked. If
-  //     anything lands in between, the write is rejected and nothing happens.
-  //
-  // The gate is fail-closed: unreadable, still running, or no checks at all all
-  // count as not green. Skipping costs an hour; bumping onto a broken tree
-  // costs a version that can never be released.
-  if (options.directPush && greenState) {
-    const state = greenState;
-
-    if (!state.green) {
-      return {
-        ...base,
-        outcome: "skipped-not-green",
-        reason: `${baseBranch} is not releasable: ${state.reason} Nothing was written.`,
-      };
-    }
-
-    const pushedSha = await commitOnBranch(
-      options.githubToken,
-      options.repoOwner,
-      options.repoName,
-      baseBranch,
-      state.sha,
-      releaseMessage,
-      manifestFiles,
-    );
-
-    if (!pushedSha) {
-      return {
-        ...base,
-        outcome: "skipped-branch-moved",
-        reason: `${baseBranch} moved from ${state.sha.slice(0, 8)} while this run was checking it, so the commit was refused. The next run will retry.`,
-      };
-    }
-
-    return {
-      ...base,
-      outcome: "pushed",
-      branch: baseBranch,
-      commitSha: pushedSha,
-      reason: `Committed ${nextVersion} to ${baseBranch} (${state.reason}) as ${pushedSha.slice(0, 8)}; publish takes over from the push.`,
-    };
-  }
 
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 10);
   const branch = `${RELEASE_BRANCH_PREFIX}${stamp}`;

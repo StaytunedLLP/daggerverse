@@ -1,4 +1,4 @@
-name: Release Hourly
+name: Release
 
 # One release cycle for this repository. Nothing else may cut a release.
 #
@@ -22,7 +22,7 @@ on:
   # -- staylook :07, staystack :17, staydevops :27, gonow.travel :37.
   #
   schedule:
-    - cron: "47 * * * *"
+    - cron: "50 11 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
