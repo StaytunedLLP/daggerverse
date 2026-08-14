@@ -604,6 +604,16 @@ async function hourlyRelease(
   );
 
   if (!currentTagExists) {
+    // A dry run must not dispatch. Reporting the repair is the whole point of a
+    // dry run; performing it is exactly what the caller asked not to happen.
+    if (options.dryRun) {
+      return {
+        ...base,
+        outcome: "repair-dispatched",
+        reason: `Manifest is at ${manifest.version} but ${currentTag} does not exist: a previous run bumped without publishing. Would dispatch ${PUBLISH_WORKFLOW_FILE} to release ${currentTag}.`,
+      };
+    }
+
     const dispatched = await dispatchWorkflow(
       options.githubToken,
       options.repoOwner,

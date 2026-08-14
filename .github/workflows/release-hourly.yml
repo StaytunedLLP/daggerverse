@@ -44,6 +44,10 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # Required to dispatch the publish workflow when a manifest was bumped
+  # without its tag. Without it the repair reports "Could not dispatch" and the
+  # version stays stranded -- observed on v1.12.6.
+  actions: write
 
 jobs:
   hourly-release:
