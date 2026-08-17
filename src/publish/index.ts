@@ -4,6 +4,7 @@ import {
   checkRegistryVersion,
   checkReleaseExists,
   checkTagExists,
+  commitOnBranch,
   countReleasableCommits,
   dispatchWorkflow,
   createGithubRelease,
@@ -17,7 +18,10 @@ import {
   packageFilePath,
   compareVersions,
   nextPatchVersion,
+  nextReleaseVersion,
   parseExactVersion,
+  parseReleaseBump,
+  readBranchGreenState,
   readPackageJsonAtPath,
   readBaseBranchPackageJson,
   validateRegistryScope,
@@ -564,7 +568,8 @@ async function hourlyRelease(
     "package-lock.json",
   );
 
-  const nextVersion = nextPatchVersion(manifest.version);
+  const bump = parseReleaseBump(options.bump);
+  const nextVersion = nextReleaseVersion(manifest.version, bump);
   const tagName = `v${nextVersion}`;
 
   const base = {
@@ -633,12 +638,15 @@ async function hourlyRelease(
   // A release already in flight. Exiting successfully is correct -- but only
   // while it is progressing, so an old one becomes a hard failure rather than a
   // silent halt.
-  const inFlight = await findOpenReleasePr(
-    options.githubToken,
-    options.repoOwner,
-    options.repoName,
-    RELEASE_BRANCH_PREFIX,
-  );
+  // Direct-push never opens a PR, so there is nothing in flight to wait on.
+  const inFlight = options.directPush
+    ? null
+    : await findOpenReleasePr(
+        options.githubToken,
+        options.repoOwner,
+        options.repoName,
+        RELEASE_BRANCH_PREFIX,
+      );
 
   if (inFlight) {
     if (inFlight.ageHours >= staleHours) {
@@ -733,7 +741,25 @@ async function hourlyRelease(
     lockJson.packages[""].version = nextVersion;
   }
 
+  const greenState = options.directPush
+    ? await readBranchGreenState(
+        options.githubToken,
+        options.repoOwner,
+        options.repoName,
+        baseBranch,
+      )
+    : null;
+
   if (options.dryRun) {
+    if (greenState) {
+      return {
+        ...base,
+        outcome: "dry-run",
+        reason: greenState.green
+          ? `Would commit ${nextVersion} to ${baseBranch}@${greenState.sha.slice(0, 8)} (${greenState.reason})`
+          : `Would refuse: ${baseBranch} is not releasable -- ${greenState.reason}`,
+      };
+    }
     return {
       ...base,
       outcome: "dry-run",
@@ -749,6 +775,42 @@ async function hourlyRelease(
     { path: lockFile, contents: `${JSON.stringify(lockJson, null, 2)}\n` },
   ];
   const releaseMessage = `chore(release): hourly v${nextVersion}`;
+
+  if (options.directPush && greenState) {
+    if (!greenState.green) {
+      return {
+        ...base,
+        outcome: "skipped-not-green",
+        reason: `${baseBranch} is not releasable: ${greenState.reason} Nothing was written.`,
+      };
+    }
+
+    const pushedSha = await commitOnBranch(
+      options.githubToken,
+      options.repoOwner,
+      options.repoName,
+      baseBranch,
+      greenState.sha,
+      releaseMessage,
+      manifestFiles,
+    );
+
+    if (!pushedSha) {
+      return {
+        ...base,
+        outcome: "skipped-branch-moved",
+        reason: `${baseBranch} moved from ${greenState.sha.slice(0, 8)} while this run was checking it, so the commit was refused. The next run will retry.`,
+      };
+    }
+
+    return {
+      ...base,
+      outcome: "pushed",
+      branch: baseBranch,
+      commitSha: pushedSha,
+      reason: `Committed ${nextVersion} to ${baseBranch} (${greenState.reason}) as ${pushedSha.slice(0, 8)}; publish takes over from the push.`,
+    };
+  }
 
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 10);
   const branch = `${RELEASE_BRANCH_PREFIX}${stamp}`;

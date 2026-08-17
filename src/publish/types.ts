@@ -102,6 +102,19 @@ export interface ReleasePackageOptions {
    * success.
    */
   stalePrHours?: number;
+
+  /**
+   * Commit the version bump straight onto the base branch instead of opening a
+   * release pull request. Uses the StayAgent app token already minted by the
+   * caller. Off by default.
+   */
+  directPush?: boolean;
+
+  /**
+   * SemVer component to increment when a release is needed. Scheduled runs
+   * should stay on patch. Dispatch may pass minor or major.
+   */
+  bump?: "patch" | "minor" | "major";
 }
 
 export interface PackageManifest {
@@ -181,9 +194,12 @@ export interface HourlyReleaseResult {
    */
   outcome:
     | "skipped-in-flight"
+    | "skipped-not-green"
+    | "skipped-branch-moved"
     | "nothing-to-release"
     | "dry-run"
     | "opened"
+    | "pushed"
     | "repair-dispatched";
   reason: string;
   prUrl?: string;
