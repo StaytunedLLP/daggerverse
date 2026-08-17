@@ -931,10 +931,26 @@ export async function commitOnBranch(
         "set -eu",
         encodeSteps,
         `query='mutation($repo: String!, $branch: String!, $oid: GitObjectID!, $message: String!, ${varDecls}) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repo, branchName: $branch }, message: { headline: $message }, expectedHeadOid: $oid, fileChanges: { additions: [ ${additions} ] } }) { commit { oid } } }'`,
-        `gh api graphql -f query="$query" -F repo=${shellQuote(`${repoOwner}/${repoName}`)} -F branch=${shellQuote(branch)} -F oid=${shellQuote(expectedHeadOid)} -F message=${shellQuote(message)} ${fileFlags} --jq '.data.createCommitOnBranch.commit.oid' 2>/dev/null || true`,
+        `gh api graphql -f query="$query" -F repo=${shellQuote(`${repoOwner}/${repoName}`)} -F branch=${shellQuote(branch)} -F oid=${shellQuote(expectedHeadOid)} -F message=${shellQuote(message)} ${fileFlags} > /tmp/commit.json || true`,
+        `cat /tmp/commit.json`,
       ].join("\n"),
     ])
     .stdout();
 
-  return output.trim();
+  const raw = output.trim();
+  const oidMatch = /"oid"\s*:\s*"([0-9a-f]{40})"/i.exec(raw);
+  if (oidMatch?.[1]) {
+    return oidMatch[1];
+  }
+  if (raw.includes("expectedHeadOid") || raw.includes("Expected")) {
+    return "";
+  }
+  if (raw.includes("FORBIDDEN") || raw.includes("rule violations")) {
+    throw new Error(
+      `StayAgent cannot commit to ${branch}: ${raw}. Grant the StayAgent / stay-gh app a bypass on staypr and staychecks for this repository, or direct-push cannot land.`,
+    );
+  }
+  throw new Error(
+    `createCommitOnBranch did not return a commit oid. Response: ${raw || "(empty)"}`,
+  );
 }
