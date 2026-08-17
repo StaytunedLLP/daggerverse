@@ -26,6 +26,7 @@ import {
   gitDiffStaged,
 } from "#git/index.js";
 import { releasePackage } from "#publish/index.js";
+import { parseReleaseBump } from "#publish/helpers.js";
 import type { ReleasePackageAction } from "#publish/types.js";
 import { runPlaywrightTests } from "#playwright/index.js";
 
@@ -944,6 +945,8 @@ export class StaydevopsTs {
     dryRun = false,
     autoMerge = true,
     stalePrHours = 6,
+    directPush = false,
+    bump = "patch",
   ): Promise<string> {
     const supported = [
       "sync-pr-version",
@@ -973,6 +976,8 @@ export class StaydevopsTs {
       dryRun,
       autoMerge,
       stalePrHours,
+      directPush,
+      bump: parseReleaseBump(bump),
     });
   }
 }

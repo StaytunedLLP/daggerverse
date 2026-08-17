@@ -164,7 +164,29 @@ export function compareVersions(left: string, right: string): number {
  * Calculates the next patch version from an exact semver string.
  */
 export function nextPatchVersion(version: string): string {
+  return nextReleaseVersion(version, "patch");
+}
+
+export type ReleaseBump = "patch" | "minor" | "major";
+
+export const parseReleaseBump = (value: string | undefined): ReleaseBump => {
+  if (value === "minor" || value === "major" || value === "patch") {
+    return value;
+  }
+  if (value === undefined || value === "") {
+    return "patch";
+  }
+  throw new Error(`Invalid release bump "${value}". Expected patch, minor, or major.`);
+};
+
+export function nextReleaseVersion(version: string, bump: ReleaseBump): string {
   const parts = parseExactVersion(version);
+  if (bump === "major") {
+    return `${parts.major + 1}.0.0`;
+  }
+  if (bump === "minor") {
+    return `${parts.major}.${parts.minor + 1}.0`;
+  }
   return `${parts.major}.${parts.minor}.${parts.patch + 1}`;
 }
 
@@ -758,4 +780,161 @@ export async function dispatchWorkflow(
     ])
     .stdout();
   return out.trim() === "OK";
+}
+
+export interface BranchGreenState {
+  sha: string;
+  green: boolean;
+  reason: string;
+}
+
+const isReleaseSelfCheck = (name: string): boolean =>
+  /^(Hourly Release|Release Reusable)$/i.test(name) || /^Release$/i.test(name);
+
+/**
+ * Whether a branch head passed the checks that actually reported on it.
+ *
+ * Fail-closed: unreadable, still running, or no checks all count as not green.
+ * Ignores the Release job's own in-progress check-run so a scheduled release
+ * cannot block itself.
+ */
+export async function readBranchGreenState(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  branch: string,
+): Promise<BranchGreenState> {
+  const out = await ghContainer(githubToken, repoOwner, repoName)
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -u",
+        `sha="$(gh api "repos/${repoOwner}/${repoName}/git/ref/heads/${branch}" --jq .object.sha 2>/dev/null || true)"`,
+        `[ -n "$sha" ] || { echo "SHA:"; exit 0; }`,
+        `echo "SHA:$sha"`,
+        `gh api "repos/${repoOwner}/${repoName}/commits/$sha/check-runs?per_page=100" --jq '.check_runs[]|"RUN:\\(.name)\\t\\(.status)\\t\\(.conclusion // "")"' 2>/dev/null || true`,
+        `gh api "repos/${repoOwner}/${repoName}/commits/$sha/status" --jq '.statuses[]|"RUN:\\(.context)\\tcompleted\\t\\(.state)"' 2>/dev/null || true`,
+      ].join("\n"),
+    ])
+    .stdout();
+
+  const lines = out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const shaLine = lines.find((line) => line.startsWith("SHA:"));
+  const sha = shaLine ? shaLine.slice("SHA:".length) : "";
+  if (!sha) {
+    return {
+      sha: "",
+      green: false,
+      reason: `Could not read the head of ${branch}; refusing to push.`,
+    };
+  }
+
+  const runs = new Map<string, { status: string; conclusion: string }>();
+  for (const line of lines.filter((entry) => entry.startsWith("RUN:"))) {
+    const [name, status, conclusion] = line.slice("RUN:".length).split("\t");
+    if (!name || isReleaseSelfCheck(name)) {
+      continue;
+    }
+    const seen = runs.get(name);
+    if (!seen || seen.conclusion === "" || conclusion === "") {
+      runs.set(name, { status: status ?? "", conclusion: conclusion ?? "" });
+    }
+  }
+
+  if (runs.size === 0) {
+    return {
+      sha,
+      green: false,
+      reason: `No checks have reported on ${branch}@${sha.slice(0, 8)}; refusing to push.`,
+    };
+  }
+
+  const isQualityGate = (name: string): boolean =>
+    /dagger checks/i.test(name) || /scaffold, sync, doctor/i.test(name);
+
+  const gates = [...runs.entries()].filter(([name]) => isQualityGate(name));
+  if (gates.length === 0) {
+    return {
+      sha,
+      green: false,
+      reason: `No Dagger Checks (or scaffold/tsc) reported on ${branch}@${sha.slice(0, 8)}; refusing to push.`,
+    };
+  }
+
+  const passing = new Set(["success", "neutral", "skipped"]);
+  const pending = gates.filter(([, run]) => run.status !== "completed");
+  const failed = gates.filter(
+    ([, run]) => run.status === "completed" && !passing.has(run.conclusion),
+  );
+
+  if (pending.length === 0 && failed.length === 0) {
+    return {
+      sha,
+      green: true,
+      reason: `quality gates passed on ${sha.slice(0, 8)} (${gates.map(([name]) => name).join(", ")})`,
+    };
+  }
+
+  const parts: string[] = [];
+  if (failed.length > 0) {
+    parts.push(
+      `failing: ${failed.map(([n, run]) => `${n} (${run.conclusion})`).join(", ")}`,
+    );
+  }
+  if (pending.length > 0) {
+    parts.push(`still running: ${pending.map(([n]) => n).join(", ")}`);
+  }
+  return { sha, green: false, reason: `${parts.join("; ")}.` };
+}
+
+/**
+ * Commits onto an existing branch with createCommitOnBranch so GitHub signs
+ * the commit and expectedHeadOid refuses a write if the branch moved.
+ */
+export async function commitOnBranch(
+  githubToken: Secret,
+  repoOwner: string,
+  repoName: string,
+  branch: string,
+  expectedHeadOid: string,
+  message: string,
+  files: { path: string; contents: string }[],
+): Promise<string> {
+  const additions = files
+    .map((file, index) => `{ path: ${JSON.stringify(file.path)}, contents: $c${index} }`)
+    .join(", ");
+  const varDecls = files.map((_, index) => `$c${index}: Base64String!`).join(", ");
+  const fileFlags = files.map((_, index) => `-F c${index}=@/tmp/c${index}.b64`).join(" ");
+
+  let container = ghContainer(githubToken, repoOwner, repoName);
+  for (const [index, file] of files.entries()) {
+    container = container.withNewFile(`/tmp/c${index}.raw`, file.contents);
+  }
+
+  const encodeSteps = files
+    .map(
+      (_, index) =>
+        `base64 -w 0 /tmp/c${index}.raw > /tmp/c${index}.b64 2>/dev/null || base64 /tmp/c${index}.raw | tr -d '\\n' > /tmp/c${index}.b64`,
+    )
+    .join("\n");
+
+  const output = await container
+    .withExec([
+      "sh",
+      "-c",
+      [
+        "set -eu",
+        encodeSteps,
+        `query='mutation($repo: String!, $branch: String!, $oid: GitObjectID!, $message: String!, ${varDecls}) { createCommitOnBranch(input: { branch: { repositoryNameWithOwner: $repo, branchName: $branch }, message: { headline: $message }, expectedHeadOid: $oid, fileChanges: { additions: [ ${additions} ] } }) { commit { oid } } }'`,
+        `gh api graphql -f query="$query" -F repo=${shellQuote(`${repoOwner}/${repoName}`)} -F branch=${shellQuote(branch)} -F oid=${shellQuote(expectedHeadOid)} -F message=${shellQuote(message)} ${fileFlags} --jq '.data.createCommitOnBranch.commit.oid' 2>/dev/null || true`,
+      ].join("\n"),
+    ])
+    .stdout();
+
+  return output.trim();
 }
